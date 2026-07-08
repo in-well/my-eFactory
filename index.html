@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Test04 工程実績送信</title>
+
+<script src="https://unpkg.com/@zxing/library@latest"></script>
+
+<style>
+
+body{font-family:Arial;padding:10px;background:#f4f6f8;}
+.card{background:#fff;padding:10px;margin-bottom:10px;border-radius:8px;}
+button{width:100%;height:60px;font-size:20px;margin-top:10px;}
+.value{font-size:22px;font-weight:bold;}
+video{width:100%;border:2px solid #333;border-radius:8px;}
+
+</style>
+
+</head>
+
+<body>
+
+<h2>Test04 工程実績送信</h2>
+
+<div class="card">
+製番
+<div id="orderNo" class="value">未読取</div>
+</div>
+
+<div class="card">
+工順
+<div id="processNo" class="value">未読取</div>
+</div>
+
+<button onclick="startScan()">📷 読取開始</button>
+<button onclick="sendData()">📤 送信</button>
+
+<video id="video" autoplay></video>
+
+<script>
+
+let codeReader;
+let mode = "ORDER";
+let deviceId;
+
+// ★★★ ここをあなたのGAS URLに変更 ★★★
+const GAS_URL = "https://script.google.com/macros/s/XXXXX/exec";
+
+window.onload = function(){
+  codeReader = new ZXing.BrowserMultiFormatReader();
+};
+
+function startScan(){
+
+  codeReader.listVideoInputDevices()
+  .then(devices => {
+
+    deviceId = devices[0].deviceId;
+
+    mode = "ORDER";
+
+    codeReader.decodeFromVideoDevice(
+      deviceId,
+      "video",
+      onResult
+    );
+
+  });
+
+}
+
+function onResult(result){
+
+  if(!result) return;
+
+  const text = result.text;
+
+  if(mode === "ORDER"){
+
+    document.getElementById("orderNo").innerText = text;
+    mode = "PROCESS";
+    return;
+
+  }
+
+  if(mode === "PROCESS"){
+
+    if(!/^\d{3,4}$/.test(text)) return;
+
+    document.getElementById("processNo").innerText = text;
+
+    codeReader.reset();
+
+  }
+
+}
+
+function sendData(){
+
+  const payload = {
+    orderNo: document.getElementById("orderNo").innerText,
+    processNo: document.getElementById("processNo").innerText,
+    mode: "START"
+  };
+
+  fetch(GAS_URL, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  })
+  .then(res => res.json())
+  .then(res => {
+
+    alert("送信成功");
+
+    document.getElementById("orderNo").innerText = "未読取";
+    document.getElementById("processNo").innerText = "未読取";
+
+  })
+  .catch(err => {
+
+    alert("送信失敗: " + err);
+
+  });
+
+}
+
+</script>
+
+</body>
+</html>
