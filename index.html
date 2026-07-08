@@ -1,22 +1,58 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 
 <head>
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<title>Test04 工程実績送信</title>
+<title>Test03 工程実績Web版</title>
 
+<!-- ZXing -->
 <script src="https://unpkg.com/@zxing/library@latest"></script>
 
 <style>
 
-body{font-family:Arial;padding:10px;background:#f4f6f8;}
-.card{background:#fff;padding:10px;margin-bottom:10px;border-radius:8px;}
-button{width:100%;height:60px;font-size:20px;margin-top:10px;}
-.value{font-size:22px;font-weight:bold;}
-video{width:100%;border:2px solid #333;border-radius:8px;}
+body{
+    font-family: Arial;
+    background:#f4f6f8;
+    padding:10px;
+}
+
+h2{
+    text-align:center;
+}
+
+.card{
+    background:#fff;
+    padding:12px;
+    margin-bottom:10px;
+    border-radius:8px;
+}
+
+button{
+    width:100%;
+    height:60px;
+    font-size:20px;
+    margin-top:10px;
+}
+
+label{
+    font-weight:bold;
+}
+
+.value{
+    font-size:22px;
+    font-weight:bold;
+    margin-top:5px;
+}
+
+video{
+    width:100%;
+    border:2px solid #333;
+    border-radius:8px;
+    margin-top:10px;
+}
 
 </style>
 
@@ -24,107 +60,118 @@ video{width:100%;border:2px solid #333;border-radius:8px;}
 
 <body>
 
-<h2>Test04 工程実績送信</h2>
+<h2>Test03 工程実績（Web版）</h2>
 
 <div class="card">
-製番
-<div id="orderNo" class="value">未読取</div>
+    <label>製番</label>
+    <div id="orderNo" class="value">未読取</div>
 </div>
 
 <div class="card">
-工順
-<div id="processNo" class="value">未読取</div>
+    <label>工順</label>
+    <div id="processNo" class="value">未読取</div>
 </div>
 
-<button onclick="startScan()">📷 読取開始</button>
-<button onclick="sendData()">📤 送信</button>
+<button onclick="startScan()">📷 カメラ起動</button>
 
 <video id="video" autoplay></video>
 
 <script>
 
+/****************************************************
+ * グローバル
+ ****************************************************/
 let codeReader;
 let mode = "ORDER";
 let deviceId;
 
-// ★★★ ここをあなたのGAS URLに変更 ★★★
-const GAS_URL = "https://script.google.com/macros/s/XXXXX/exec";
-
+/****************************************************
+ * 初期化
+ ****************************************************/
 window.onload = function(){
-  codeReader = new ZXing.BrowserMultiFormatReader();
+
+    codeReader = new ZXing.BrowserMultiFormatReader();
+
 };
 
+/****************************************************
+ * カメラ起動
+ ****************************************************/
 function startScan(){
 
-  codeReader.listVideoInputDevices()
-  .then(devices => {
+    codeReader.listVideoInputDevices()
+    .then(devices => {
 
-    deviceId = devices[0].deviceId;
+        if(devices.length === 0){
+            alert("カメラが見つかりません");
+            return;
+        }
 
-    mode = "ORDER";
+        deviceId = devices[0].deviceId;
 
-    codeReader.decodeFromVideoDevice(
-      deviceId,
-      "video",
-      onResult
-    );
+        mode = "ORDER";
 
-  });
+        codeReader.decodeFromVideoDevice(
+            deviceId,
+            "video",
+            onResult
+        );
+
+    })
+    .catch(err => {
+        alert("カメラエラー: " + err);
+    });
 
 }
 
-function onResult(result){
+/****************************************************
+ * 読取処理
+ ****************************************************/
+function onResult(result, err){
 
-  if(!result) return;
+    if(result){
 
-  const text = result.text;
+        const text = result.text;
 
-  if(mode === "ORDER"){
+        // --------------------------
+        // 製番
+        // --------------------------
+        if(mode === "ORDER"){
 
-    document.getElementById("orderNo").innerText = text;
-    mode = "PROCESS";
-    return;
+            document.getElementById("orderNo").innerText = text;
 
-  }
+            mode = "PROCESS";
 
-  if(mode === "PROCESS"){
+            return;
+        }
 
-    if(!/^\d{3,4}$/.test(text)) return;
+        // --------------------------
+        // 工順（3〜4桁）
+        // --------------------------
+        if(mode === "PROCESS"){
 
-    document.getElementById("processNo").innerText = text;
+            if(!/^\d{3,4}$/.test(text)){
+                return;
+            }
+
+            document.getElementById("processNo").innerText = text;
+
+            stopScan();
+
+            alert("読取完了");
+
+        }
+
+    }
+
+}
+
+/****************************************************
+ * 停止
+ ****************************************************/
+function stopScan(){
 
     codeReader.reset();
-
-  }
-
-}
-
-function sendData(){
-
-  const payload = {
-    orderNo: document.getElementById("orderNo").innerText,
-    processNo: document.getElementById("processNo").innerText,
-    mode: "START"
-  };
-
-  fetch(GAS_URL, {
-    method: "POST",
-    body: JSON.stringify(payload)
-  })
-  .then(res => res.json())
-  .then(res => {
-
-    alert("送信成功");
-
-    document.getElementById("orderNo").innerText = "未読取";
-    document.getElementById("processNo").innerText = "未読取";
-
-  })
-  .catch(err => {
-
-    alert("送信失敗: " + err);
-
-  });
 
 }
 
