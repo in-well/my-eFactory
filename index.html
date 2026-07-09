@@ -6,7 +6,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<title>Test03 工程実績Web版</title>
+<title>Test03-4 工程実績Web版</title>
 
 <!-- ZXing -->
 <script src="https://unpkg.com/@zxing/library@latest"></script>
@@ -101,13 +101,34 @@ function startScan(){
 
     codeReader.listVideoInputDevices()
     .then(devices => {
-	
-	// モードをセット
+
+        if(devices.length === 0){
+            alert("カメラが見つかりません");
+            return;
+        }
+
+        // 1. デフォルトは最初のデバイスを設定
+        let targetDeviceId = devices[0].deviceId;
+
+        // 2. 外側カメラ（back, rear, environmentなど）のキーワードを持つデバイスを探す
+        const backCamera = devices.find(device => {
+            const label = device.label.toLowerCase();
+            return label.includes('back') || label.includes('rear') || label.includes('environment') || label.includes('外');
+        });
+
+        // 3. 見つかった場合はそのデバイスIDを優先する
+        if (backCamera) {
+            targetDeviceId = backCamera.deviceId;
+        } else if (devices.length > 1) {
+            // キーワードで見つからず、複数が存在する場合は最後のデバイス（スマホでは外側のことが多い）を試す
+            targetDeviceId = devices[devices.length - 1].deviceId;
+        }
+
         mode = "ORDER";
 
-   	// 第一引数を「undefined」にすることで、ZXingが自動で「外側カメラ」を強制維持します
+        // 選択した targetDeviceId でカメラを起動
         codeReader.decodeFromVideoDevice(
-            undeviceId,
+            targetDeviceId,
             "video",
             onResult
         );
