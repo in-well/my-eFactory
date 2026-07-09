@@ -74,7 +74,7 @@ video{
 
 <button onclick="startScan()">📷 カメラ起動</button>
 
-<video id="video" autoplay></video>
+<video id="video" autoplay playsinline></video>
 
 <script>
 
@@ -101,18 +101,13 @@ function startScan(){
 
     codeReader.listVideoInputDevices()
     .then(devices => {
-
-        if(devices.length === 0){
-            alert("カメラが見つかりません");
-            return;
-        }
-
-        deviceId = devices[0].deviceId;
-
+	
+	// モードをセット
         mode = "ORDER";
 
+   	// 第一引数を「undefined」にすることで、ZXingが自動で「外側カメラ」を強制維持します
         codeReader.decodeFromVideoDevice(
-            deviceId,
+            undeviceId,
             "video",
             onResult
         );
