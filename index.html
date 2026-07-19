@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>工程管理POPシステム</title>
-    <!-- 解析ライブラリ(jsQR)を先頭で確実に読み込む -->
-    <script src="https://jsdelivr.net"></script>
+    <!-- ⚠️外部ライブラリの読み込みタグを完全にゼロにしました -->
     <style>
         body { font-family: sans-serif; margin: 0; padding: 20px; background: #f4f6f9; color: #333; text-align: center; }
         .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
@@ -18,22 +17,20 @@
         .btn-complete { background: #fd7e14; color: white; display: none; }
         #status { font-weight: bold; margin-top: 15px; padding: 10px; border-radius: 6px; background: #fff3cd; color: #333; }
         #version { font-size: 12px; color: #999; text-align: right; margin-bottom: 10px; }
-        canvas { display: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div id="version">Ver 4.0 (背面カメラ確定版)</div>
+    <div id="version">Ver 5.0 (標準機能スキャン版)</div>
     <h2>工程管理POPシステム</h2>
     
-    <!-- 映像表示領域 -->
+    <!-- 映像表示 -->
     <video id="video" playsinline></video>
-    <canvas id="hiddenCanvas"></canvas>
     
     <button id="scanBtn" class="btn-scan">📷 スキャン開始</button>
 
-    <!-- 照合結果表示カード -->
+    <!-- 結果カード -->
     <div id="resultCard" class="card">
         <p><strong>管理コード:</strong> <span id="resCode">-</span></p>
         <p><strong>品名:</strong> <span id="resName">-</span></p>
@@ -53,41 +50,41 @@
     const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbyDlGoSnOFhX62bRM6MExfwUlCR2_rrmKuu71WQqDOBKRhMc_8R-lyw9ny_6YbByTcV/exec";
     
     const video = document.getElementById('video');
-    const canvas = document.getElementById('hiddenCanvas');
-    const ctx = canvas.getContext('2d');
     const statusDiv = document.getElementById('status');
     
     let localStream = null;
     let isScanning = false;
     let currentCode = null;
+    let barcodeDetector = null;
 
-    // メッセージ更新用
     function updateLog(msg, color = "#333", bg = "#fff3cd") {
         statusDiv.style.color = color;
         statusDiv.style.backgroundColor = bg;
         statusDiv.innerHTML = msg;
     }
 
-    // 1. スキャン開始ボタンのイベント
+    // ページ読み込み時に、ブラウザが標準スキャン機能に対応しているかチェック
+    window.addEventListener('DOMContentLoaded', () => {
+        if ('BarcodeDetector' in window) {
+            // QRコードと主要なバーコード（JAN, CODE128等）に対応させる
+            barcodeDetector = new BarcodeDetector({ formats: ['qr_code', 'ean_13', 'code_128'] });
+        } else {
+            updateLog("⚠️ お使いのブラウザは標準スキャン機能に未対応です。最新のSafariやChromeでお試しください。", "red", "#f8d7da");
+        }
+    });
+
+    // 1. スキャン開始ボタン
     document.getElementById('scanBtn').addEventListener('click', async () => {
-        // 表示を初期化
         document.getElementById('resultCard').style.display = "none";
         document.getElementById('startBtn').style.display = "none";
         document.getElementById('completeBtn').style.display = "none";
         updateLog("⏳ カメラを起動中...");
 
-        if (typeof jsQR === 'undefined') {
-            updateLog("❌ エラー: 解析ライブラリが読み込まれていません。", "red", "#f8d7da");
-            return;
-        }
-
-        // 過去のストリームがあれば安全に停止
         if (localStream) {
             localStream.getTracks().forEach(track => track.stop());
         }
 
         try {
-            // 背面カメラ(environment)をリクエスト
             localStream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: "environment" },
                 audio: false
@@ -97,46 +94,44 @@
             await video.play();
             
             isScanning = true;
-            updateLog("📷 <strong>スキャン中...</strong><br>QRコードを映してください", "#2e7d32", "#e2f0d9");
-            requestAnimationFrame(tick); // スキャンループの開始
+            updateLog("📷 <strong>スキャン中...</strong><br>バーコードやQRコードを映してください", "#2e7d32", "#e2f0d9");
+            
+            // ループ処理を開始
+            detectLoop();
 
         } catch (err) {
             updateLog("❌ カメラ起動エラー: " + err.name, "red", "#f8d7da");
         }
     });
 
-    // 2. 毎フレームの映像からQRコードを解析するループ
-    function tick() {
+    // 2. スマホ本体の機能で映像からコードを探すループ（超軽量）
+    async function detectLoop() {
         if (!isScanning) return;
 
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            canvas.height = video.videoHeight;
-            canvas.width = video.videoWidth;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            // jsQRに画像データを渡して解析
-            const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                inversionAttempts: "dontInvert",
-            });
+        if (video.readyState === video.HAVE_ENOUGH_DATA && barcodeDetector) {
+            try {
+                // ビデオのコマからコードを検出
+                const barcodes = await barcodeDetector.detect(video);
+                if (barcodes.length > 0) {
+                    isScanning = false;
+                    currentCode = barcodes[0].rawValue; // 読み取ったデータ
 
-            // QRコードが検出された場合
-            if (code && code.data !== "") {
-                isScanning = false;
-                currentCode = code.data;
-                
-                // カメラストリームを停止してバッテリー消費を抑える
-                localStream.getTracks().forEach(track => track.stop());
-                video.srcObject = null;
-                
-                handleScanSuccess(code.data);
-                return;
+                    // カメラを止める
+                    localStream.getTracks().forEach(track => track.stop());
+                    video.srcObject = null;
+
+                    handleScanSuccess(currentCode);
+                    return;
+                }
+            } catch (e) {
+                console.error(e);
             }
         }
-        requestAnimationFrame(tick);
+        // 次のフレームで再実行
+        requestAnimationFrame(detectLoop);
     }
 
-    // 3. スキャン成功時：GASへ照合リクエスト
+    // 3. スキャン成功時：GASへ照合
     function handleScanSuccess(scannedData) {
         updateLog(`⏳ 読込成功 [${scannedData}]<br>注残データと照合中...`);
         
@@ -164,7 +159,7 @@
         });
     }
 
-    // 4. 「着手」「完了」データ書き込みリクエスト
+    // 4. 「着手」「完了」データ書き込み
     document.getElementById('startBtn').addEventListener('click', () => updateStatus('着手'));
     document.getElementById('completeBtn').addEventListener('click', () => updateStatus('完了'));
 
