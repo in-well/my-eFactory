@@ -4,42 +4,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>工程管理POPシステム</title>
-    <!-- 対策：最も信頼性の高いCDN(unpkg)から読み込み -->
-    <script src="https://unpkg.com"></script>
-    <script>
-    // 万が一上記URLがブロックされた場合の、別の配信元(cdnjs)からの自動再読み込み処理
-    if (typeof Html5Qrcode === 'undefined') {
-    	document.write('<script src="https://cloudflare.com"><\/script>');
-    }
-</script>
+    <!-- ⚠️外部ライブラリのScriptタグはすべて削除しました -->
     <style>
         body { font-family: sans-serif; margin: 0; padding: 20px; background: #f4f6f9; color: #333; text-align: center; }
         .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        #reader { width: 100%; max-width: 400px; margin: 0 auto 15px; border-radius: 8px; overflow: hidden; background: #eee; min-height: 150px; }
+        video { width: 100%; max-width: 400px; border-radius: 8px; background: #222; transform: scaleX(1); }
         .card { background: #e9ecef; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left; display: none; }
         .card p { margin: 8px 0; font-size: 16px; }
         button { width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
         .btn-scan { background: #007bff; color: white; }
         .btn-start { background: #28a745; color: white; display: none; }
         .btn-complete { background: #fd7e14; color: white; display: none; }
-        #status { font-weight: bold; margin-top: 15px; color: #6c757d; }
+        #status { font-weight: bold; margin-top: 15px; color: #6c757d; min-height: 40px; }
         #version { font-size: 12px; color: #999; text-align: right; margin-bottom: 10px; }
+        canvas { display: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <!-- デプロイ確認用バージョン表記 -->
-    <div id="version">Ver 1.5 (CORS & Library Fix)</div>
-    
+    <div id="version">Ver 2.0 (完全自己完結版)</div>
     <h2>工程管理POPシステム</h2>
     
-    <!-- ⚠️最重要: このdivが絶対に必要です -->
-    <div id="reader"></div>
+    <!-- 標準のvideoタグのみを使用 -->
+    <video id="video" playsinline></video>
+    <canvas id="hiddenCanvas"></canvas>
     
     <button id="scanBtn" class="btn-scan">📷 スキャン開始</button>
 
-    <!-- 照合結果表示カード -->
     <div id="resultCard" class="card">
         <p><strong>管理コード:</strong> <span id="resCode">-</span></p>
         <p><strong>品名:</strong> <span id="resName">-</span></p>
@@ -47,120 +39,133 @@
         <p><strong>現在の状態:</strong> <span id="resStatus">-</span></p>
     </div>
 
-    <!-- アクションボタン -->
     <button id="startBtn" class="btn-start">▶️ 着手する</button>
     <button id="completeBtn" class="btn-complete">✅ 完了する</button>
 
-    <div id="status">バーコードまたはQRコードをスキャンしてください</div>
+    <div id="status">ボタンを押してカメラを起動してください</div>
 </div>
+
+<!-- 超軽量スキャンエンジンを埋め込み -->
+<script src="https://jsdelivr.net"></script>
 
 <script>
     // ⚠️ あなたのGASウェブアプリのURLに書き換えてください
     const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbyDlGoSnOFhX62bRM6MExfwUlCR2_rrmKuu71WQqDOBKRhMc_8R-lyw9ny_6YbByTcV/exec";
     
-    let html5QrcodeScanner = null;
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('hiddenCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    let localStream = null;
+    let isScanning = false;
     let currentCode = null;
 
-    // 画面にエラーを出力するためのデバッグ関数
-    function logErrorToScreen(message, errorObj) {
-        console.error(message, errorObj);
-        const statusDiv = document.getElementById('status');
-        let errorDetails = "";
-        if (errorObj) {
-            errorDetails = `<br><small style="color:red; word-break:break-all;">[詳細]: ${errorObj.name || ''} - ${errorObj.message || errorObj}</small>`;
-        }
-        statusDiv.innerHTML = `<span style="color:red; font-weight:bold;">❌ エラー発生: ${message}</span>${errorDetails}`;
+    // エラー表示用関数
+    function showError(msg, err) {
+        const details = err ? `<br><small style="color:red;word-break:break-all;">${err.name || ''}: ${err.message || err}</small>` : '';
+        document.getElementById('status').innerHTML = `<span style="color:red;font-weight:bold;">❌ ${msg}</span>${details}`;
     }
 
-    // 1. スキャナーの初期化と開始
-    document.getElementById('scanBtn').addEventListener('click', () => {
+    // 1. カメラ起動＆リアルタイム解析ループ
+    document.getElementById('scanBtn').addEventListener('click', async () => {
         document.getElementById('resultCard').style.display = "none";
         document.getElementById('startBtn').style.display = "none";
         document.getElementById('completeBtn').style.display = "none";
-        document.getElementById('status').innerText = "カメラを初期化中...";
+        document.getElementById('status').innerText = "カメラを起動中...";
+
+        if (typeof jsQR === 'undefined') {
+            showError("解析エンジン(jsQR)の読み込みに失敗しています。HTMLの末尾を確認してください。");
+            return;
+        }
 
         try {
-            // ライブラリ自体が読み込まれているかチェック
-            if (typeof Html5Qrcode === 'undefined') {
-                throw new Error("Html5Qrcode ライブラリが読み込まれていません。ScriptタグのURLを確認してください。");
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
             }
 
-            // 要素が存在するかチェック
-            if (!document.getElementById("reader")) {
-                throw new Error("HTML内に id='reader' の要素が見つかりません。");
-            }
-
-            // 前回のスキャナーが残っていればクリア
-            if(html5QrcodeScanner) { 
-                try { html5QrcodeScanner.clear(); } catch(e){}
-            }
-
-            // ライブラリの初期化
-            html5QrcodeScanner = new Html5Qrcode("reader");
-            
-            document.getElementById('status').innerText = "カメラのストリームを取得中...";
-
-            // カメラの起動
-            html5QrcodeScanner.start(
-                { facingMode: "environment" }, 
-                { fps: 10, qrbox: { width: 250, height: 150 } },
-                onScanSuccess,
-                onScanFailure
-            ).then(() => {
-                document.getElementById('status').innerText = "📷 スキャン中... カメラの枠内にコードをかざしてください。";
-            }).catch(err => {
-                logErrorToScreen("カメラの起動（start）に失敗しました", err);
+            // カメラアクセス要求
+            localStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "environment" },
+                audio: false
             });
+            
+            video.srcObject = localStream;
+            video.setAttribute("playsinline", true);
+            video.play();
+            
+            isScanning = true;
+            document.getElementById('status').innerText = "📷 QRコードを画面に映してください...";
+            requestAnimationFrame(tick); // 解析ループ開始
 
         } catch (err) {
-            logErrorToScreen("初期化フェーズでエラーが発生しました", err);
+            showError("カメラの起動権限、または端末制限により拒否されました", err);
         }
     });
 
-    // 2. スキャン成功時の処理
-    function onScanSuccess(decodedText, decodedResult) {
-        try {
-            html5QrcodeScanner.stop();
-            currentCode = decodedText;
-            document.getElementById('status').innerText = `読込成功: ${decodedText}。照合中...`;
+    // 2. 毎フレームの描画からQRを切り出すループ処理
+    function tick() {
+        if (!isScanning) return;
 
-            const url = `${GAS_ENDPOINT}?action=check&code=${encodeURIComponent(decodedText)}`;
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.height = video.videoHeight;
+            canvas.width = video.videoWidth;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
-            fetch(url)
-            .then(response => response.json())
-            .then(data => {
-                if (data.result === "success") {
-                    document.getElementById('resCode').innerText = currentCode;
-                    document.getElementById('resName').innerText = data.data.name;
-                    document.getElementById('resProcess').innerText = data.data.process;
-                    document.getElementById('resStatus').innerText = data.data.status || "未着手";
-                    
-                    document.getElementById('resultCard').style.display = "block";
-                    document.getElementById('startBtn').style.display = "block";
-                    document.getElementById('completeBtn').style.display = "block";
-                    document.getElementById('status').innerText = "データを確認し、ボタンを押してください。";
-                } else {
-                    document.getElementById('status').innerText = "❌ 注残データに見つかりませんでした。";
-                }
-            })
-            .catch(err => {
-                logErrorToScreen("GASへの照合通信（fetch）に失敗しました", err);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            // jsQRエンジンで画像内を高速スキャン
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: "dontInvert",
             });
-        } catch (err) {
-            logErrorToScreen("スキャン成功後の処理でエラーが発生しました", err);
+
+            if (code && code.data !== "") {
+                isScanning = false;
+                currentCode = code.data;
+                
+                // ヒットしたらカメラを止める
+                localStream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                
+                handleScanSuccess(code.data);
+                return;
+            }
         }
+        requestAnimationFrame(tick);
     }
 
-    function onScanFailure(error) {
-        // スキャン中のエラーは無視
+    // 3. スキャン成功後のGAS通信
+    function handleScanSuccess(scannedData) {
+        document.getElementById('status').innerText = `読込成功: ${scannedData}。照合中...`;
+        
+        const url = `${GAS_ENDPOINT}?action=check&code=${encodeURIComponent(scannedData)}`;
+        
+        fetch(url)
+        .then(res => res.json())
+        .then(data => {
+            if (data.result === "success") {
+                document.getElementById('resCode').innerText = currentCode;
+                document.getElementById('resName').innerText = data.data.name;
+                document.getElementById('resProcess').innerText = data.data.process;
+                document.getElementById('resStatus').innerText = data.data.status || "未着手";
+                
+                document.getElementById('resultCard').style.display = "block";
+                document.getElementById('startBtn').style.display = "block";
+                document.getElementById('completeBtn').style.display = "block";
+                document.getElementById('status').innerText = "データを確認し、操作を選択してください。";
+            } else {
+                document.getElementById('status').innerText = "❌ 注残データに登録がありません。";
+            }
+        })
+        .catch(err => {
+            showError("スプレッドシート(GAS)との照合通信に失敗しました", err);
+        });
     }
 
-    // 3. ボタン更新処理
+    // 4. 「着手」「完了」ボタン処理
     document.getElementById('startBtn').addEventListener('click', () => updateStatus('着手'));
     document.getElementById('completeBtn').addEventListener('click', () => updateStatus('完了'));
 
     function updateStatus(statusType) {
-        document.getElementById('status').innerText = `${statusType}データを送信中...`;
+        document.getElementById('status').innerText = `${statusType}情報を送信中...`;
         document.getElementById('startBtn').disabled = true;
         document.getElementById('completeBtn').disabled = true;
 
@@ -173,19 +178,19 @@
                 status: statusType
             })
         })
-        .then(response => response.json())
+        .then(res => res.json())
         .then(data => {
             if (data.result === "success") {
-                document.getElementById('status').innerText = `🎉 状態を【${statusType}】に更新しました！`;
+                document.getElementById('status').innerText = `🎉 ステータスを【${statusType}】に更新しました！`;
                 document.getElementById('resStatus').innerText = statusType;
             } else {
-                document.getElementById('status').innerText = "❌ 更新に失敗しました。";
+                document.getElementById('status').innerText = "❌ スプレッドシートの更新に失敗しました。";
             }
             document.getElementById('startBtn').disabled = false;
             document.getElementById('completeBtn').disabled = false;
         })
         .catch(err => {
-            logErrorToScreen("ステータス更新の通信（fetch）に失敗しました", err);
+            showError("更新データの送信に失敗しました", err);
             document.getElementById('startBtn').disabled = false;
             document.getElementById('completeBtn').disabled = false;
         });
