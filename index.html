@@ -23,7 +23,7 @@
 <body>
 
 <div class="container">
-    <h2>工程管理POPシステムver07191</h2>
+    <h2>工程管理POPシステムver07192</h2>
     
     <!-- スキャナー表示領域 -->
     <div id="reader"></div>
@@ -66,7 +66,7 @@
         
         // 背面カメラ優先でスキャン開始
         html5QrcodeScanner.start(
-            { facingMode: "environment" },
+            "environment",// exactを外し、背面カメラを「優先」にする記述に変更
             { fps: 10, qrbox: { width: 250, height: 150 } }, // バーコードが入りやすいよう横長に設定
             onScanSuccess,
             onScanFailure
