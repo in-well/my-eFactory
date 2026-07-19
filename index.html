@@ -4,8 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>工程管理POPシステム</title>
-    <!-- ライブラリの読み込み（CDNを変更して安定化） -->
-    <script src="https://cloudflare.com"></script>
+    <!-- 対策：最も信頼性の高いCDN(unpkg)から読み込み -->
+    <script src="https://unpkg.com"></script>
+    <script>
+    // 万が一上記URLがブロックされた場合の、別の配信元(cdnjs)からの自動再読み込み処理
+    if (typeof Html5Qrcode === 'undefined') {
+    	document.write('<script src="https://cloudflare.com"><\/script>');
+    }
+</script>
     <style>
         body { font-family: sans-serif; margin: 0; padding: 20px; background: #f4f6f9; color: #333; text-align: center; }
         .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
@@ -24,7 +30,7 @@
 
 <div class="container">
     <!-- デプロイ確認用バージョン表記 -->
-    <div id="version">Ver 1.4 (CORS & Library Fix)</div>
+    <div id="version">Ver 1.5 (CORS & Library Fix)</div>
     
     <h2>工程管理POPシステム</h2>
     
