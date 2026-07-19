@@ -4,18 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>工程管理POPシステム</title>
-    <!-- ⚠️外部ライブラリのScriptタグはすべて削除しました -->
+    <!-- ⚠️最重要: 解析ライブラリを一番最初に確実に読み込む -->
+    <script src="https://jsdelivr.net"></script>
     <style>
         body { font-family: sans-serif; margin: 0; padding: 20px; background: #f4f6f9; color: #333; text-align: center; }
         .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        video { width: 100%; max-width: 400px; border-radius: 8px; background: #222; transform: scaleX(1); }
+        video { width: 100%; max-width: 400px; border-radius: 8px; background: #222; margin-bottom: 10px; }
         .card { background: #e9ecef; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left; display: none; }
         .card p { margin: 8px 0; font-size: 16px; }
         button { width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
         .btn-scan { background: #007bff; color: white; }
         .btn-start { background: #28a745; color: white; display: none; }
         .btn-complete { background: #fd7e14; color: white; display: none; }
-        #status { font-weight: bold; margin-top: 15px; color: #6c757d; min-height: 40px; }
+        #status { font-weight: bold; margin-top: 15px; color: #333; min-height: 40px; background: #fff3cd; padding: 10px; border-radius: 6px; }
         #version { font-size: 12px; color: #999; text-align: right; margin-bottom: 10px; }
         canvas { display: none; }
     </style>
@@ -23,10 +24,10 @@
 <body>
 
 <div class="container">
-    <div id="version">Ver 2.0 (完全自己完結版)</div>
+    <div id="version">Ver 2.1 (実況ログ搭載版)</div>
     <h2>工程管理POPシステム</h2>
     
-    <!-- 標準のvideoタグのみを使用 -->
+    <!-- 映像表示 -->
     <video id="video" playsinline></video>
     <canvas id="hiddenCanvas"></canvas>
     
@@ -45,74 +46,92 @@
     <div id="status">ボタンを押してカメラを起動してください</div>
 </div>
 
-<!-- 超軽量スキャンエンジンを埋め込み -->
-<script src="https://jsdelivr.net"></script>
-
 <script>
     // ⚠️ あなたのGASウェブアプリのURLに書き換えてください
     const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbyDlGoSnOFhX62bRM6MExfwUlCR2_rrmKuu71WQqDOBKRhMc_8R-lyw9ny_6YbByTcV/exec";
     
     const video = document.getElementById('video');
     const canvas = document.getElementById('hiddenCanvas');
-    const ctx = canvas.getContext('2d');
+    const statusDiv = document.getElementById('status');
     
     let localStream = null;
     let isScanning = false;
     let currentCode = null;
 
-    // エラー表示用関数
-    function showError(msg, err) {
-        const details = err ? `<br><small style="color:red;word-break:break-all;">${err.name || ''}: ${err.message || err}</small>` : '';
-        document.getElementById('status').innerHTML = `<span style="color:red;font-weight:bold;">❌ ${msg}</span>${details}`;
+    // 進行状況やエラーを強制的に画面に表示する関数
+    function printLog(msg, isError = false) {
+        if (isError) {
+            statusDiv.innerHTML = `<span style="color:red; font-weight:bold;">❌ エラー: ${msg}</span>`;
+        } else {
+            statusDiv.innerHTML = `<span style="color:#0056b3;">⏳ ${msg}</span>`;
+        }
     }
 
-    // 1. カメラ起動＆リアルタイム解析ループ
+    // 1. スキャン開始ボタンのクリックイベント
     document.getElementById('scanBtn').addEventListener('click', async () => {
+        printLog("ボタンクリックを検知しました...");
+        
+        // 画面の初期化
         document.getElementById('resultCard').style.display = "none";
         document.getElementById('startBtn').style.display = "none";
         document.getElementById('completeBtn').style.display = "none";
-        document.getElementById('status').innerText = "カメラを起動中...";
 
+        // ライブラリの存在チェック
+        printLog("解析ライブラリ(jsQR)を確認中...");
         if (typeof jsQR === 'undefined') {
-            showError("解析エンジン(jsQR)の読み込みに失敗しています。HTMLの末尾を確認してください。");
+            printLog("jsQRライブラリが読み込まれていません。ネットワーク環境かタグの位置を確認してください。", true);
             return;
         }
 
-        try {
-            if (localStream) {
+        // 過去のカメラストリームがあれば停止
+        printLog("古いストリームを破棄中...");
+        if (localStream) {
+            try {
                 localStream.getTracks().forEach(track => track.stop());
-            }
+            } catch(e) { }
+        }
 
-            // カメラアクセス要求
-            localStream = await navigator.mediaDevices.getUserMedia({
+        // カメラアクセスの要求
+        printLog("ブラウザにカメラアクセス（getUserMedia）を要求中...");
+        try {
+            const constraints = {
                 video: { facingMode: "environment" },
                 audio: false
-            });
+            };
+            
+            localStream = await navigator.mediaDevices.getUserMedia(constraints);
+            printLog("カメラ接続成功。ストリームを設定中...");
             
             video.srcObject = localStream;
             video.setAttribute("playsinline", true);
-            video.play();
             
+            printLog("ビデオ再生を開始します...");
+            await video.play();
+            
+            printLog("解析ループ（tick）を開始します...");
             isScanning = true;
-            document.getElementById('status').innerText = "📷 QRコードを画面に映してください...";
-            requestAnimationFrame(tick); // 解析ループ開始
+            statusDiv.style.background = "#e2f0d9";
+            statusDiv.innerHTML = "📷 <strong style='color:#2e7d32;'>スキャン中...</strong><br>QRコードをカメラに映してください";
+            
+            requestAnimationFrame(tick);
 
         } catch (err) {
-            showError("カメラの起動権限、または端末制限により拒否されました", err);
+            // ここでカメラの拒否エラー等を確実にキャッチ
+            printLog(`${err.name}: ${err.message}`, true);
         }
     });
 
-    // 2. 毎フレームの描画からQRを切り出すループ処理
+    // 2. リアルタイム解析ループ
     function tick() {
         if (!isScanning) return;
 
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            const ctx = canvas.getContext('2d');
             canvas.height = video.videoHeight;
             canvas.width = video.videoWidth;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            // jsQRエンジンで画像内を高速スキャン
             const code = jsQR(imageData.data, imageData.width, imageData.height, {
                 inversionAttempts: "dontInvert",
             });
@@ -121,7 +140,7 @@
                 isScanning = false;
                 currentCode = code.data;
                 
-                // ヒットしたらカメラを止める
+                // カメラを停止
                 localStream.getTracks().forEach(track => track.stop());
                 video.srcObject = null;
                 
@@ -134,7 +153,8 @@
 
     // 3. スキャン成功後のGAS通信
     function handleScanSuccess(scannedData) {
-        document.getElementById('status').innerText = `読込成功: ${scannedData}。照合中...`;
+        statusDiv.style.background = "#fff3cd";
+        printLog(`読込成功 [${scannedData}]。GASと照合中...`);
         
         const url = `${GAS_ENDPOINT}?action=check&code=${encodeURIComponent(scannedData)}`;
         
@@ -150,13 +170,13 @@
                 document.getElementById('resultCard').style.display = "block";
                 document.getElementById('startBtn').style.display = "block";
                 document.getElementById('completeBtn').style.display = "block";
-                document.getElementById('status').innerText = "データを確認し、操作を選択してください。";
+                statusDiv.innerHTML = "✅ 照合完了。操作を選択してください。";
             } else {
-                document.getElementById('status').innerText = "❌ 注残データに登録がありません。";
+                statusDiv.innerHTML = "❌ <strong style='color:red;'>注残データに登録がありません。</strong>";
             }
         })
         .catch(err => {
-            showError("スプレッドシート(GAS)との照合通信に失敗しました", err);
+            printLog(`GAS照合エラー: ${err.message}`, true);
         });
     }
 
@@ -165,7 +185,7 @@
     document.getElementById('completeBtn').addEventListener('click', () => updateStatus('完了'));
 
     function updateStatus(statusType) {
-        document.getElementById('status').innerText = `${statusType}情報を送信中...`;
+        printLog(`${statusType}情報を送信中...`);
         document.getElementById('startBtn').disabled = true;
         document.getElementById('completeBtn').disabled = true;
 
@@ -181,16 +201,16 @@
         .then(res => res.json())
         .then(data => {
             if (data.result === "success") {
-                document.getElementById('status').innerText = `🎉 ステータスを【${statusType}】に更新しました！`;
+                statusDiv.innerHTML = `🎉 <strong>ステータスを【${statusType}】に更新しました！</strong>`;
                 document.getElementById('resStatus').innerText = statusType;
             } else {
-                document.getElementById('status').innerText = "❌ スプレッドシートの更新に失敗しました。";
+                statusDiv.innerHTML = "❌ <strong>スプレッドシートの更新に失敗しました。</strong>";
             }
             document.getElementById('startBtn').disabled = false;
             document.getElementById('completeBtn').disabled = false;
         })
         .catch(err => {
-            showError("更新データの送信に失敗しました", err);
+            printLog(`更新送信エラー: ${err.message}`, true);
             document.getElementById('startBtn').disabled = false;
             document.getElementById('completeBtn').disabled = false;
         });
