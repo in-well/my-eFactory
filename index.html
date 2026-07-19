@@ -3,41 +3,202 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>カメラテスト</title>
+    <title>工程管理POPシステム</title>
+    <!-- 解析ライブラリ(jsQR)を先頭で確実に読み込む -->
+    <script src="https://jsdelivr.net"></script>
+    <style>
+        body { font-family: sans-serif; margin: 0; padding: 20px; background: #f4f6f9; color: #333; text-align: center; }
+        .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        video { width: 100%; max-width: 400px; border-radius: 8px; background: #222; margin-bottom: 10px; }
+        .card { background: #e9ecef; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left; display: none; }
+        .card p { margin: 8px 0; font-size: 16px; }
+        button { width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
+        .btn-scan { background: #007bff; color: white; }
+        .btn-start { background: #28a745; color: white; display: none; }
+        .btn-complete { background: #fd7e14; color: white; display: none; }
+        #status { font-weight: bold; margin-top: 15px; padding: 10px; border-radius: 6px; background: #fff3cd; color: #333; }
+        #version { font-size: 12px; color: #999; text-align: right; margin-bottom: 10px; }
+        canvas { display: none; }
+    </style>
 </head>
-<body style="text-align: center; padding-top: 50px;">
+<body>
 
-    <h2>カメラ起動テスト（Ver 3.0）</h2>
+<div class="container">
+    <div id="version">Ver 4.0 (背面カメラ確定版)</div>
+    <h2>工程管理POPシステム</h2>
     
-    <!-- 映像を表示するだけのシンプルな箱 -->
-    <video id="testVideo" autoplay playsinline style="width: 100%; max-width: 400px; background: black;"></video>
-    <br><br>
+    <!-- 映像表示領域 -->
+    <video id="video" playsinline></video>
+    <canvas id="hiddenCanvas"></canvas>
     
-    <button id="testBtn" style="padding: 20px 40px; font-size: 20px;">📷 カメラを起動する</button>
-    
-    <h3 id="testMsg" style="margin-top: 30px; color: blue;">ボタンを押してください</h3>
+    <button id="scanBtn" class="btn-scan">📷 スキャン開始</button>
+
+    <!-- 照合結果表示カード -->
+    <div id="resultCard" class="card">
+        <p><strong>管理コード:</strong> <span id="resCode">-</span></p>
+        <p><strong>品名:</strong> <span id="resName">-</span></p>
+        <p><strong>工程名:</strong> <span id="resProcess">-</span></p>
+        <p><strong>現在の状態:</strong> <span id="resStatus">-</span></p>
+    </div>
+
+    <!-- アクションボタン -->
+    <button id="startBtn" class="btn-start">▶️ 着手する</button>
+    <button id="completeBtn" class="btn-complete">✅ 完了する</button>
+
+    <div id="status">ボタンを押してカメラを起動してください</div>
+</div>
 
 <script>
-    document.getElementById('testBtn').addEventListener('click', async () => {
-        const msg = document.getElementById('testMsg');
-        msg.innerText = "処理を開始しました...";
-        msg.style.color = "orange";
+    // ⚠️ あなたのGASウェブアプリのURLに書き換えてください
+    const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbyDlGoSnOFhX62bRM6MExfwUlCR2_rrmKuu71WQqDOBKRhMc_8R-lyw9ny_6YbByTcV/exec";
+    
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('hiddenCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusDiv = document.getElementById('status');
+    
+    let localStream = null;
+    let isScanning = false;
+    let currentCode = null;
+
+    // メッセージ更新用
+    function updateLog(msg, color = "#333", bg = "#fff3cd") {
+        statusDiv.style.color = color;
+        statusDiv.style.backgroundColor = bg;
+        statusDiv.innerHTML = msg;
+    }
+
+    // 1. スキャン開始ボタンのイベント
+    document.getElementById('scanBtn').addEventListener('click', async () => {
+        // 表示を初期化
+        document.getElementById('resultCard').style.display = "none";
+        document.getElementById('startBtn').style.display = "none";
+        document.getElementById('completeBtn').style.display = "none";
+        updateLog("⏳ カメラを起動中...");
+
+        if (typeof jsQR === 'undefined') {
+            updateLog("❌ エラー: 解析ライブラリが読み込まれていません。", "red", "#f8d7da");
+            return;
+        }
+
+        // 過去のストリームがあれば安全に停止
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+        }
 
         try {
-            // 最も単純な命令でカメラを要求
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            // 背面カメラ(environment)をリクエスト
+            localStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "environment" },
+                audio: false
+            });
             
-            msg.innerText = "✅ カメラ接続成功！映像を表示します。";
-            msg.style.color = "green";
+            video.srcObject = localStream;
+            await video.play();
             
-            document.getElementById('testVideo').srcObject = stream;
+            isScanning = true;
+            updateLog("📷 <strong>スキャン中...</strong><br>QRコードを映してください", "#2e7d32", "#e2f0d9");
+            requestAnimationFrame(tick); // スキャンループの開始
+
         } catch (err) {
-            // エラーをそのまま文字として画面に出す
-            msg.innerText = "❌ エラー: " + err.name + " (" + err.message + ")";
-            msg.style.color = "red";
+            updateLog("❌ カメラ起動エラー: " + err.name, "red", "#f8d7da");
         }
     });
-</script>
 
+    // 2. 毎フレームの映像からQRコードを解析するループ
+    function tick() {
+        if (!isScanning) return;
+
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.height = video.videoHeight;
+            canvas.width = video.videoWidth;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            // jsQRに画像データを渡して解析
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: "dontInvert",
+            });
+
+            // QRコードが検出された場合
+            if (code && code.data !== "") {
+                isScanning = false;
+                currentCode = code.data;
+                
+                // カメラストリームを停止してバッテリー消費を抑える
+                localStream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                
+                handleScanSuccess(code.data);
+                return;
+            }
+        }
+        requestAnimationFrame(tick);
+    }
+
+    // 3. スキャン成功時：GASへ照合リクエスト
+    function handleScanSuccess(scannedData) {
+        updateLog(`⏳ 読込成功 [${scannedData}]<br>注残データと照合中...`);
+        
+        const url = `${GAS_ENDPOINT}?action=check&code=${encodeURIComponent(scannedData)}`;
+        
+        fetch(url)
+        .then(res => res.json())
+        .then(data => {
+            if (data.result === "success") {
+                document.getElementById('resCode').innerText = currentCode;
+                document.getElementById('resName').innerText = data.data.name;
+                document.getElementById('resProcess').innerText = data.data.process;
+                document.getElementById('resStatus').innerText = data.data.status || "未着手";
+                
+                document.getElementById('resultCard').style.display = "block";
+                document.getElementById('startBtn').style.display = "block";
+                document.getElementById('completeBtn').style.display = "block";
+                updateLog("✅ 照合完了。操作を選択してください。", "#155724", "#d4edda");
+            } else {
+                updateLog("❌ 注残データに登録がありません。", "#721c24", "#f8d7da");
+            }
+        })
+        .catch(err => {
+            updateLog("❌ GAS照合通信エラー: " + err.message, "red", "#f8d7da");
+        });
+    }
+
+    // 4. 「着手」「完了」データ書き込みリクエスト
+    document.getElementById('startBtn').addEventListener('click', () => updateStatus('着手'));
+    document.getElementById('completeBtn').addEventListener('click', () => updateStatus('完了'));
+
+    function updateStatus(statusType) {
+        updateLog(`⏳ ${statusType}情報を送信中...`);
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('completeBtn').disabled = true;
+
+        fetch(GAS_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain" },
+            body: JSON.stringify({
+                action: "update",
+                code: currentCode,
+                status: statusType
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.result === "success") {
+                updateLog(`🎉 <strong>ステータスを【${statusType}】に更新しました！</strong>`, "#155724", "#d4edda");
+                document.getElementById('resStatus').innerText = statusType;
+            } else {
+                updateLog("❌ スプレッドシートの更新に失敗しました。", "red", "#f8d7da");
+            }
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('completeBtn').disabled = false;
+        })
+        .catch(err => {
+            updateLog("❌ 更新送信エラー: " + err.message, "red", "#f8d7da");
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('completeBtn').disabled = false;
+        });
+    }
+</script>
 </body>
 </html>
