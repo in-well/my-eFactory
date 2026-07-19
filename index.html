@@ -4,28 +4,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>工程管理POPシステム</title>
-    <!-- QR/バーコードリーダーライブラリの読み込み -->
-    <script src="https://unpkg.com"></script>
+    <!-- ライブラリの読み込み（CDNを変更して安定化） -->
+    <script src="https://cloudflare.com"></script>
     <style>
         body { font-family: sans-serif; margin: 0; padding: 20px; background: #f4f6f9; color: #333; text-align: center; }
         .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        #reader { width: 100%; max-width: 400px; margin: 0 auto 15px; border-radius: 8px; overflow: hidden; }
+        #reader { width: 100%; max-width: 400px; margin: 0 auto 15px; border-radius: 8px; overflow: hidden; background: #eee; min-height: 150px; }
         .card { background: #e9ecef; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left; display: none; }
         .card p { margin: 8px 0; font-size: 16px; }
-        .card strong { color: #495057; }
-        button { width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button { width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
         .btn-scan { background: #007bff; color: white; }
         .btn-start { background: #28a745; color: white; display: none; }
         .btn-complete { background: #fd7e14; color: white; display: none; }
         #status { font-weight: bold; margin-top: 15px; color: #6c757d; }
+        #version { font-size: 12px; color: #999; text-align: right; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>工程管理POPシステムver0719-3</h2>
+    <!-- デプロイ確認用バージョン表記 -->
+    <div id="version">Ver 1.4 (CORS & Library Fix)</div>
     
-    <!-- スキャナー表示領域 -->
+    <h2>工程管理POPシステム</h2>
+    
+    <!-- ⚠️最重要: このdivが絶対に必要です -->
     <div id="reader"></div>
     
     <button id="scanBtn" class="btn-scan">📷 スキャン開始</button>
@@ -56,13 +59,9 @@
     function logErrorToScreen(message, errorObj) {
         console.error(message, errorObj);
         const statusDiv = document.getElementById('status');
-        
-        // 画面に赤い文字でエラーの詳細を追加
         let errorDetails = "";
         if (errorObj) {
-            errorDetails = `<br><small style="color:red; word-break:break-all;">
-                [詳細]: ${errorObj.name || ''} - ${errorObj.message || errorObj}
-            </small>`;
+            errorDetails = `<br><small style="color:red; word-break:break-all;">[詳細]: ${errorObj.name || ''} - ${errorObj.message || errorObj}</small>`;
         }
         statusDiv.innerHTML = `<span style="color:red; font-weight:bold;">❌ エラー発生: ${message}</span>${errorDetails}`;
     }
@@ -75,9 +74,19 @@
         document.getElementById('status').innerText = "カメラを初期化中...";
 
         try {
+            // ライブラリ自体が読み込まれているかチェック
+            if (typeof Html5Qrcode === 'undefined') {
+                throw new Error("Html5Qrcode ライブラリが読み込まれていません。ScriptタグのURLを確認してください。");
+            }
+
+            // 要素が存在するかチェック
+            if (!document.getElementById("reader")) {
+                throw new Error("HTML内に id='reader' の要素が見つかりません。");
+            }
+
             // 前回のスキャナーが残っていればクリア
             if(html5QrcodeScanner) { 
-                html5QrcodeScanner.clear(); 
+                try { html5QrcodeScanner.clear(); } catch(e){}
             }
 
             // ライブラリの初期化
@@ -85,22 +94,20 @@
             
             document.getElementById('status').innerText = "カメラのストリームを取得中...";
 
-            // カメラの起動（引数をシンプルにしてブラウザの自動選択に任せる）
+            // カメラの起動
             html5QrcodeScanner.start(
-                { facingMode: "environment" }, // 標準的な背面指定（端末が対応していれば背面、不可なら前面）
+                { facingMode: "environment" }, 
                 { fps: 10, qrbox: { width: 250, height: 150 } },
                 onScanSuccess,
                 onScanFailure
             ).then(() => {
                 document.getElementById('status').innerText = "📷 スキャン中... カメラの枠内にコードをかざしてください。";
             }).catch(err => {
-                // カメラストリームの取得失敗エラーをキャッチ
                 logErrorToScreen("カメラの起動（start）に失敗しました", err);
             });
 
         } catch (err) {
-            // ライブラリの初期化自体に失敗した場合（ID「reader」が見つからないなど）
-            logErrorToScreen("スキャナーの初期化（new Html5Qrcode）に失敗しました", err);
+            logErrorToScreen("初期化フェーズでエラーが発生しました", err);
         }
     });
 
@@ -138,12 +145,11 @@
         }
     }
 
-    // スキャン中のエラー（毎フレーム発生する読み取り失敗）は画面を汚すためログ出力のみ
     function onScanFailure(error) {
-        // console.log(error); // 必要に応じてコメントアウトを解除してください
+        // スキャン中のエラーは無視
     }
 
-    // 3. 「着手」「完了」ボタンクリック時の処理
+    // 3. ボタン更新処理
     document.getElementById('startBtn').addEventListener('click', () => updateStatus('着手'));
     document.getElementById('completeBtn').addEventListener('click', () => updateStatus('完了'));
 
@@ -179,6 +185,5 @@
         });
     }
 </script>
-
 </body>
 </html>
