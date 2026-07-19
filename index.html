@@ -1,197 +1,156 @@
 <!DOCTYPE html>
 <html lang="ja">
-
 <head>
-
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-
-<title>Test03-04 工程実績Web版</title>
-
-<!-- ZXing -->
-<script src="https://unpkg.com/@zxing/library@latest"></script>
-
-<style>
-
-body{
-    font-family: Arial;
-    background:#f4f6f8;
-    padding:10px;
-}
-
-h2{
-    text-align:center;
-}
-
-.card{
-    background:#fff;
-    padding:12px;
-    margin-bottom:10px;
-    border-radius:8px;
-}
-
-button{
-    width:100%;
-    height:60px;
-    font-size:20px;
-    margin-top:10px;
-}
-
-label{
-    font-weight:bold;
-}
-
-.value{
-    font-size:22px;
-    font-weight:bold;
-    margin-top:5px;
-}
-
-video{
-    width:100%;
-    border:2px solid #333;
-    border-radius:8px;
-    margin-top:10px;
-}
-
-</style>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工程管理POPシステム</title>
+    <!-- QR/バーコードリーダーライブラリの読み込み -->
+    <script src="https://unpkg.com"></script>
+    <style>
+        body { font-family: sans-serif; margin: 0; padding: 20px; background: #f4f6f9; color: #333; text-align: center; }
+        .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        #reader { width: 100%; max-width: 400px; margin: 0 auto 15px; border-radius: 8px; overflow: hidden; }
+        .card { background: #e9ecef; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left; display: none; }
+        .card p { margin: 8px 0; font-size: 16px; }
+        .card strong { color: #495057; }
+        button { width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .btn-scan { background: #007bff; color: white; }
+        .btn-start { background: #28a745; color: white; display: none; }
+        .btn-complete { background: #fd7e14; color: white; display: none; }
+        #status { font-weight: bold; margin-top: 15px; color: #6c757d; }
+    </style>
 </head>
-
 <body>
 
-<h2>Test03 工程実績（Web版）</h2>
+<div class="container">
+    <h2>工程管理POPシステム</h2>
+    
+    <!-- スキャナー表示領域 -->
+    <div id="reader"></div>
+    
+    <button id="scanBtn" class="btn-scan">📷 スキャン開始</button>
 
-<div class="card">
-    <label>製番</label>
-    <div id="orderNo" class="value">未読取</div>
+    <!-- 照合結果表示カード -->
+    <div id="resultCard" class="card">
+        <p><strong>管理コード:</strong> <span id="resCode">-</span></p>
+        <p><strong>品名:</strong> <span id="resName">-</span></p>
+        <p><strong>工程名:</strong> <span id="resProcess">-</span></p>
+        <p><strong>現在の状態:</strong> <span id="resStatus">-</span></p>
+    </div>
+
+    <!-- アクションボタン -->
+    <button id="startBtn" class="btn-start">▶️ 着手する</button>
+    <button id="completeBtn" class="btn-complete">✅ 完了する</button>
+
+    <div id="status">バーコードまたはQRコードをスキャンしてください</div>
 </div>
-
-<div class="card">
-    <label>工順</label>
-    <div id="processNo" class="value">未読取</div>
-</div>
-
-<button onclick="startScan()">📷 カメラ起動</button>
-
-<video id="video" autoplay playsinline></video>
 
 <script>
+    // ⚠️ あなたのGASウェブアプリのURLに書き換えてください
+    const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbyDlGoSnOFhX62bRM6MExfwUlCR2_rrmKuu71WQqDOBKRhMc_8R-lyw9ny_6YbByTcV/exec";
+    
+    let html5QrcodeScanner = null;
+    let currentCode = null; // スキャンしたコードを保持
 
-/****************************************************
- * グローバル
- ****************************************************/
-let codeReader;
-let mode = "ORDER";
-let deviceId;
+    // 1. スキャナーの初期化と開始
+    document.getElementById('scanBtn').addEventListener('click', () => {
+        document.getElementById('resultCard').style.display = "none";
+        document.getElementById('startBtn').style.display = "none";
+        document.getElementById('completeBtn').style.display = "none";
+        document.getElementById('status').innerText = "カメラを起動中...";
 
-/****************************************************
- * 初期化
- ****************************************************/
-window.onload = function(){
+        // 前回のスキャナーが残っていればクリア
+        if(html5QrcodeScanner) { html5QrcodeScanner.clear(); }
 
-    codeReader = new ZXing.BrowserMultiFormatReader();
-
-};
-
-/****************************************************
- * カメラ起動
- ****************************************************/
-function startScan(){
-
-    codeReader.listVideoInputDevices()
-    .then(devices => {
-
-        if(devices.length === 0){
-            alert("カメラが見つかりません");
-            return;
-        }
-
-        // 1. デフォルトは最初のデバイスを設定
-        let targetDeviceId = devices[0].deviceId;
-
-        // 2. 外側カメラ（back, rear, environmentなど）のキーワードを持つデバイスを探す
-        const backCamera = devices.find(device => {
-            const label = device.label.toLowerCase();
-            return label.includes('back') || label.includes('rear') || label.includes('environment') || label.includes('外');
+        html5QrcodeScanner = new Html5Qrcode("reader");
+        
+        // 背面カメラ優先でスキャン開始
+        html5QrcodeScanner.start(
+            { facingMode: "environment" },
+            { fps: 10, qrbox: { width: 250, height: 150 } }, // バーコードが入りやすいよう横長に設定
+            onScanSuccess,
+            onScanFailure
+        ).catch(err => {
+            document.getElementById('status').innerText = "カメラの起動に失敗しました。";
+            console.error(err);
         });
-
-        // 3. 見つかった場合はそのデバイスIDを優先する
-        if (backCamera) {
-            targetDeviceId = backCamera.deviceId;
-        } else if (devices.length > 1) {
-            // キーワードで見つからず、複数が存在する場合は最後のデバイス（スマホでは外側のことが多い）を試す
-            targetDeviceId = devices[devices.length - 1].deviceId;
-        }
-
-        mode = "ORDER";
-
-        // 選択した targetDeviceId でカメラを起動
-        codeReader.decodeFromVideoDevice(
-            targetDeviceId,
-            "video",
-            onResult
-        );
-
-    })
-    .catch(err => {
-        alert("カメラエラー: " + err);
     });
 
-}
+    // 2. スキャン成功時の処理（データ照合リクエスト）
+    function onScanSuccess(decodedText, decodedResult) {
+        // スキャン成功したらカメラを止める
+        html5QrcodeScanner.stop();
+        currentCode = decodedText;
+        document.getElementById('status').innerText = `読込成功: ${decodedText}。照合中...`;
 
-/****************************************************
- * 読取処理
- ****************************************************/
-function onResult(result, err){
-
-    if(result){
-
-        const text = result.text;
-
-        // --------------------------
-        // 製番
-        // --------------------------
-        if(mode === "ORDER"){
-
-            document.getElementById("orderNo").innerText = text;
-
-            mode = "PROCESS";
-
-            return;
-        }
-
-        // --------------------------
-        // 工順（3〜4桁）
-        // --------------------------
-        if(mode === "PROCESS"){
-
-            if(!/^\d{3,4}$/.test(text)){
-                return;
+        // GASへ照合リクエスト（GETメソッドで送信）
+        const url = `${GAS_ENDPOINT}?action=check&code=${encodeURIComponent(decodedText)}`;
+        
+        fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (data.result === "success") {
+                // 画面に品名や工程名を表示
+                document.getElementById('resCode').innerText = currentCode;
+                document.getElementById('resName').innerText = data.data.name;
+                document.getElementById('resProcess').innerText = data.data.process;
+                document.getElementById('resStatus').innerText = data.data.status || "未着手";
+                
+                document.getElementById('resultCard').style.display = "block";
+                document.getElementById('startBtn').style.display = "block";
+                document.getElementById('completeBtn').style.display = "block";
+                document.getElementById('status').innerText = "データを確認し、ボタンを押してください。";
+            } else {
+                document.getElementById('status').innerText = "❌ 注残データに見つかりませんでした。";
             }
-
-            document.getElementById("processNo").innerText = text;
-
-            stopScan();
-
-            alert("読取完了");
-
-        }
-
+        })
+        .catch(err => {
+            document.getElementById('status').innerText = "通信エラーが発生しました。";
+            console.error(err);
+        });
     }
 
-}
+    function onScanFailure(error) {
+        // スキャン中の毎フレームのエラーは無視する（ログが埋まるため）
+    }
 
-/****************************************************
- * 停止
- ****************************************************/
-function stopScan(){
+    // 3. 「着手」「完了」ボタンクリック時の処理
+    document.getElementById('startBtn').addEventListener('click', () => updateStatus('着手'));
+    document.getElementById('completeBtn').addEventListener('click', () => updateStatus('完了'));
 
-    codeReader.reset();
+    function updateStatus(statusType) {
+        document.getElementById('status').innerText = `${statusType}データを送信中...`;
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('completeBtn').disabled = true;
 
-}
-
+        // GASへステータス更新リクエスト（POSTメソッドで送信）
+        fetch(GAS_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain" }, // CORS回避のため敢えてtext/plainで送る（GAS側でパース）
+            body: JSON.stringify({
+                action: "update",
+                code: currentCode,
+                status: statusType
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.result === "success") {
+                document.getElementById('status').innerText = `🎉 状態を【${statusType}】に更新しました！`;
+                document.getElementById('resStatus').innerText = statusType;
+            } else {
+                document.getElementById('status').innerText = "❌ 更新に失敗しました。";
+            }
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('completeBtn').disabled = false;
+        })
+        .catch(err => {
+            document.getElementById('status').innerText = "通信エラーが発生しました。";
+            console.error(err);
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('completeBtn').disabled = false;
+        });
+    }
 </script>
-
 </body>
 </html>
