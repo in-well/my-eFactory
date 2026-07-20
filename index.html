@@ -7,14 +7,23 @@
     <style>
         body { font-family: sans-serif; margin: 0; padding: 20px; background: #f4f6f9; color: #333; text-align: center; }
         .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        .video-wrapper { position: relative; width: 100%; max-width: 400px; margin: 0 auto 10px; border-radius: 8px; overflow: hidden; background: #222; }
+        .video-wrapper {
+            position: relative; 
+            width: 100%; 
+            max-width: 400px;
+            max-height: 40vh; /* 💡画面の高さ(縦)の「40%」までにカメラを制限する */ 
+            margin: 0 auto 10px; 
+            border-radius: 8px; 
+            overflow: hidden; 
+            background: #222; 
+        }
         video { width: 100%; display: block; }
         .target-line {
             position: absolute;
-            top: 40%;     /* 上から40%の位置（残り60%の半分） */
+            top: 30%;     /* 上から40%の位置（残り60%の半分） */
             left: 5%;     /* 左右に少し余白を持たせる */
             width: 90%;    /* 横幅 */
-            height: 20%;   /* 💡JavaScriptの切り取り処理と一致させる（高さ20%） */
+            height: 40%;   /* 💡JavaScriptの切り取り処理と一致させる（高さ40%） */
             border: 3px dashed #ff3333; /* 赤色の破線枠 */
             box-sizing: border-box;
             pointer-events: none; /* ボタンなどのクリック操作を邪魔しないようにする */
@@ -138,7 +147,7 @@
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
                 // 中央20%のトリミング制御
-                const trimHeight = canvas.height * 0.20;
+                const trimHeight = canvas.height * 0.40;
                 const trimTop = (canvas.height - trimHeight) / 2;
                 const trimmedData = ctx.getImageData(0, trimTop, canvas.width, trimHeight);
                 
@@ -162,6 +171,25 @@
                     
                     // 💡条件分岐2: 1回目のバーコード(13桁)が読めた場合 ➔ 2回目モードへ
                     if (digit === 13 && !savedSeiban) {
+                        // 「ピッ」と音を鳴らす
+                        try {
+                            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                            const oscillator = audioCtx.createOscillator();
+                            const gainNode = audioCtx.createGain();
+        
+                            oscillator.type = 'sine'; // 音色（サイン波）
+                            oscillator.frequency.setValueAtTime(2000, audioCtx.currentTime); // 音の高さ（2000Hz：高めのピッ）
+                            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); // 音量
+        
+                            oscillator.connect(gainNode);
+                            gainNode.connect(audioCtx.destination);
+        
+                            oscillator.start();
+                            oscillator.stop(audioCtx.currentTime + 0.1); // 0.1秒だけ鳴らす
+                        } catch (e) {
+                            console.log("Audio error:", e);
+                        }
+
                         savedSeiban = readText; // 製番をキープ
                         updateLog(`▶️ 製番[${savedSeiban}]を保存しました<br>続けて<strong>工程コード(4桁)</strong>を赤線に映してください`, "#2e7d32", "#e2f0d9");
                         
