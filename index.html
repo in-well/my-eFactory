@@ -47,8 +47,8 @@
 <body>
 
 <div class="container">
-    <div id="version">Ver 7.1 (2段階スキャン対応版)</div>
-    <h2>工程管理POPシステム(for Android)</h2>
+    <div id="version">Ver 7.3 (Android版)</div>
+    <h2>工程管理POPシステム</h2>
     
     <div class="video-wrapper">
         <video id="video" playsinline></video>
@@ -64,13 +64,37 @@
         <p><strong>読込コード:</strong> <span id="resCode">-</span></p>
         <p><strong>品名:</strong> <span id="resName">-</span></p>
         <p><strong>工程名:</strong> <span id="resProcess">-</span></p>
-        <p><strong>現在の状態:</strong> <span id="resStatus">-</span></p>
+        <p><strong>進捗状態:</strong> <span id="resStatus">-</span></p>
     </div>
 
     <button id="startBtn" class="btn-start">▶️ 着手する</button>
     <button id="completeBtn" class="btn-complete">✅ 完了する</button>
 
     <div id="status">ボタンを押してカメラを起動してください</div>
+
+    <!-- 💡 追加：中断・手入力切り替え用ボタン -->
+    <div id="manual-trigger-area" style="text-align: center; margin: 15px 0;">
+        <button type="button" id="btn-cancel-scan" style="background-color: #666; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer;">
+            スキャンを中断して手入力する
+        </button>
+    </div>
+
+    <!-- 💡 追加：隠し手入力フォーム（最初は非表示、ボタンを押すと現れる） -->
+    <div id="manual-input-form" style="display: none; background: #f5f5f5; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px solid #ccc;">
+        <h3 style="margin-top:0; font-size: 16px; color: #333;">手入力フォーム</h3>
+        <div style="margin-bottom: 10px;">
+            <label style="display:block; font-weight:bold; margin-bottom:5px;">製番 (13桁):</label>
+            <input type="text" id="manual-seiban" maxlength="13" placeholder="13桁の番号を入力" style="width: 100%; padding: 8px; font-size: 16px; box-sizing: border-box;">
+        </div>
+        <div style="margin-bottom: 15px;">
+            <label style="display:block; font-weight:bold; margin-bottom:5px;">工程 (4桁):</label>
+            <input type="text" id="manual-koutei" maxlength="4" placeholder="4桁の番号を入力" style="width: 100%; padding: 8px; font-size: 16px; box-sizing: border-box;">
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button type="button" id="btn-manual-submit" style="flex: 1; background-color: #28a745; color: white; padding: 12px; border: none; border-radius: 5px; font-size: 16px; font-weight: bold;">この内容で確定する</button>
+            <button type="button" id="btn-manual-back" style="background-color: #dc3545; color: white; padding: 12px; border: none; border-radius: 5px; font-size: 14px;">戻る</button>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -179,7 +203,7 @@
         
                             oscillator.type = 'sine'; // 音色（サイン波）
                             oscillator.frequency.setValueAtTime(2000, audioCtx.currentTime); // 音の高さ（2000Hz：高めのピッ）
-                            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); // 音量
+                            gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // 音量
         
                             oscillator.connect(gainNode);
                             gainNode.connect(audioCtx.destination);
@@ -213,6 +237,64 @@
         }
         requestAnimationFrame(detectLoop);
     }
+
+    // === 💡 追加：ボタン操作や手入力を処理するプログラム ===
+    document.addEventListener('DOMContentLoaded', () => {
+        const btnCancel = document.getElementById('btn-cancel-scan');
+        const btnManualSubmit = document.getElementById('btn-manual-submit');
+        const btnManualBack = document.getElementById('btn-manual-back');
+        const manualForm = document.getElementById('manual-input-form');
+        const triggerArea = document.getElementById('manual-trigger-area');
+        const videoWrapper = document.querySelector('.video-wrapper'); // カメラエリア
+
+        // 1. スキャン中断ボタンを押したとき
+        btnCancel.addEventListener('click', () => {
+            isScanning = false; // スキャンを一時停止
+            if (videoWrapper) videoWrapper.style.display = 'none'; // カメラを非表示にする
+            triggerArea.style.display = 'none'; // 中断ボタンも隠す
+            manualForm.style.display = 'block'; // 手入力フォームを表示
+            
+            // 途中で13桁だけ読み取れていた場合は、入力欄に初期値を入れてあげる（親切設計）
+            // ※もしプログラム内にすでに読み取った製番を記憶している変数（例: currentSeiban 等）があれば、
+            // document.getElementById('manual-seiban').value = currentSeiban; と書くことで引き継げます。
+        });
+
+        // 2. 手入力の「戻る」ボタンを押したとき（スキャンを再開する）
+        btnManualBack.addEventListener('click', () => {
+            manualForm.style.display = 'none';
+            if (videoWrapper) videoWrapper.style.display = 'block';
+            triggerArea.style.display = 'block';
+            
+            isScanning = true; // スキャナを再度有効化
+            detectLoop(); // ループを再開
+        });
+
+        // 3. 手入力完了「確定する」ボタンを押したとき
+        btnManualSubmit.addEventListener('click', () => {
+            const seibanVal = document.getElementById('manual-seiban').value.trim();
+            const kouteiVal = document.getElementById('manual-koutei').value.trim();
+
+            // バリデーション（桁数チェック）
+            if (seibanVal.length !== 13) {
+                alert('製番は13桁で入力してください。');
+                return;
+            }
+            if (kouteiVal.length !== 4) {
+                alert('工程は4桁で入力してください。');
+                return;
+            }
+
+            // データの確定処理
+            alert(`手入力データを確定しました。\n製番: ${seibanVal}\n工程: ${kouteiVal}`);
+            
+            // 💡 ここに、既存のプログラムで「2つのコードが揃った後に実行していた次の処理」を書き込みます。
+            // GAS側が判別しやすいよう、カンマ区切り、またはそのまま結合。ここではGAS側で2値として分離しやすいように「製番,工程」の形式にします
+            finalCodeToSend = `${seibanVal},${kouteiVal}`;
+            handleScanSuccess(finalCodeToSend);
+            return;
+        });
+    });
+
 
     function stopCamera() {
         if (localStream) {
