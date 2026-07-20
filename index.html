@@ -139,7 +139,7 @@
             savedSeiban = null;
             finalCodeToSend = null;
  
-            updateLog("カメラを起動中...");
+            updateLog("⏳カメラを起動中...");
 
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
@@ -154,11 +154,11 @@
                 await video.play();
  
                 isScanning = true;
-                updateLog("<strong>[1回目スキャン]</strong><br>QR(11桁) または 製番バーコード(13桁)を映してください", "#0056b3", "#e8f4fd");
+                updateLog("📷 <strong>[1回目スキャン]</strong><br>QR(11桁) または 製番バーコード(13桁)を映してください", "#0056b3", "#e8f4fd");
                 detectLoop();
 
             } catch (err) {
-                updateLog("カメラ起動エラー: " + err.name, "red", "#f8d7da"); 
+                updateLog("❌ カメラ起動エラー: " + err.name, "red", "#f8d7da"); 
             }
         });
  
@@ -288,7 +288,7 @@
  
         // 3.ｽｷｬﾝ成功時：GASへ照合リクエスト
         function handleScanSuccess(scannedData) {
-            updateLog(`読込成功 [${scannedData}]<br>注残データと照合中...`); 
+            updateLog(`⏳読込成功 [${scannedData}]<br>注残データと照合中...`); 
  
             const url = `${GAS_ENDPOINT}?action=check&code=${encodeURIComponent(scannedData)}`;
  
@@ -310,13 +310,13 @@
                     const scanBtn = document.getElementById('scanBtn');
                     scanBtn.innerText = "次のスキャン";
                     scanBtn.style.display = "block";
-                    updateLog("照合完了。操作を選択してください。", "#155724", "#d4edda");
+                    updateLog("✅ 照合完了。操作を選択してください。", "#155724", "#d4edda");
                 } else {
-                    updateLog("注残データに登録がありません。", "#721c24", "#f8d7da");
+                    updateLog("❌ 注残データに登録がありません。", "#721c24", "#f8d7da");
                 }
             })
              .catch(err => {
-                updateLog("GAS照合通信エラー: " + err.message, "red", "#f8d7da");
+                updateLog("❌ GAS照合通信エラー: " + err.message, "red", "#f8d7da");
             });
         }
 
@@ -325,7 +325,7 @@
         document.getElementById('completeBtn').addEventListener('click', () => updateStatus('完了'));
 
         function updateStatus(statusType) {
-            updateLog( ${statusType}情報を送信中...);
+            updateLog(`⏳ ${statusType}情報を送信中...`);
             document.getElementById('startBtn').disabled = true;
             document.getElementById('completeBtn').disabled = true;
             fetch(GAS_ENDPOINT, {
@@ -340,7 +340,7 @@
             .then(res => res.json())
             .then(data => {
                 if (data.result === "success") {
-                    updateLog(<strong>ステータスを【${statusType}】に更新しました！ 🎉</strong>, "#155724", "#d4edda");
+                    updateLog(`🎉 <strong>ステータスを【${statusType}】に更新しました！</strong>`, "#155724", "#d4edda");
                     document.getElementById('resStatus').innerText = statusType;
                     // ステータス更新完了後、次の処理のためにボタンをすっきりさせる
                     document.getElementById('startBtn').style.display = "none";
