@@ -34,8 +34,8 @@
 <body>
 
 <div class="container">
-    <div id="version">Ver 7.0 (2段階スキャン対応版)</div>
-    <h2>工程管理POPシステム</h2>
+    <div id="version">Ver 7.1 (2段階スキャン対応版)</div>
+    <h2>工程管理POPシステム(for Android)</h2>
     
     <div class="video-wrapper">
         <video id="video" playsinline></video>
@@ -144,7 +144,7 @@
                 const barcodes = await barcodeDetector.detect(canvas);
                 
                 if (barcodes.length > 0) {
-                    const readText = barcodes.rawValue.trim();
+                    const readText = barcodes[0].rawValue.trim(); // 配列から取得に修正 260720
                     const digit = readText.length;
 
                     // 💡条件分岐1: QRコード(11桁)が読めた場合 ➔ 1発で終了
