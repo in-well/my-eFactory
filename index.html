@@ -1,104 +1,132 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工程管理POPシステム</title>
-    <style>
-        body { font-family: sans-serif; margin: 0; padding: 20px; background: #f4f6f9; color: #333; text-align: center; }
-        .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        .video-wrapper {
-            position: relative; 
-            width: 100%; 
-            max-width: 400px;
-            max-height: 40vh; /* 画面の高さ(縦)の「40%」までにカメラを制限する */
-            margin: 0 auto 10px; 
-            border-radius: 8px; 
-            overflow: hidden; 
-            background: #222; 
-            }
-        video { width: 100%; display: block; }
-        .target-line {
-            position: absolute;
-            top: 30%; 
-            left: 5%; 
-            width: 90%; 
-            height: 40%; /* JavaScriptの切り取り処理と一致させる（高さ40%） */
-            border: 3px dashed #ff3333; /* 赤色の破線枠 */
-            box-sizing: border-box;
-            pointer-events: none; 
-            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4); /* 枠の外側をうっすら暗くして目立たせる */
-        }
-        .card { background: #e9ecef; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left; display: none; }
-        .card p { margin: 8px 0; font-size: 16px; }
-        button { width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
-        .btn-scan { background: #007bff; color: white; }
-        .btn-start { background: #28a745; color: white; display: none; }
-        .btn-complete { background: #fd7e14; color: white; display: none; }
-        #status { font-weight: bold; margin-top: 15px; padding: 10px; border-radius: 6px; background: #fff3cd; color: #333; }
-        #version { font-size: 12px; color: #999; text-align: right; margin-bottom: 10px; }
-        canvas { display: none; }
-    </style>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>工程管理POPシステム</title>
+ <style>
+ body { font-family: sans-serif; margin: 0; padding: 15px; background: #f4f6f9; color: #333; text-align: center; }
+ .container { max-width: 500px; margin: 0 auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+ #version { font-size: 12px; color: #999; text-align: right; margin-bottom: 5px; }
+ h2 { margin-top: 5px; margin-bottom: 15px; font-size: 20px; }
+ 
+ /* 💡【追加】ログイン情報・マスター選択エリア */
+ .login-box { background: #e2f0d9; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: left; border: 1px solid #b5d99c; }
+ .login-row { display: flex; gap: 8px; margin-bottom: 8px; }
+ .login-col { flex: 1; }
+ .login-col label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 3px; color: #2e7d32; }
+ .login-box select { width: 100%; padding: 8px; font-size: 14px; border-radius: 4px; border: 1px solid #99c286; background: white; }
+ 
+ .video-wrapper { position: relative; width: 100%; max-width: 400px; max-height: 35vh; margin: 0 auto 10px; border-radius: 8px; overflow: hidden; background: #222; }
+ video { width: 100%; display: block; }
+ .target-line { position: absolute; top: 30%; left: 5%; width: 90%; height: 40%; border: 3px dashed #ff3333; box-sizing: border-box; pointer-events: none; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4); }
+ 
+ .card { background: #e9ecef; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left; display: none; }
+ .card p { margin: 8px 0; font-size: 16px; }
+ button { width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
+ .btn-scan { background: #007bff; color: white; }
+ .btn-start { background: #28a745; color: white; display: none; }
+ .btn-complete { background: #fd7e14; color: white; display: none; }
+ 
+ /* 💡【追加】コメント追加ボタン */
+ .btn-comment { background: #6f42c1; color: white; margin-top: 5px; display: none; }
+ 
+ #status { font-weight: bold; margin-top: 15px; padding: 10px; border-radius: 6px; background: #fff3cd; color: #333; font-size: 15px; }
+ canvas { display: none; }
+
+ /* 💡【追加】連絡コメント選択用の子画面（モーダルウィンドウ） */
+ .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; display: none; }
+ .modal-content { background: white; padding: 20px; border-radius: 10px; width: 85%; max-width: 400px; text-align: left; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+ .modal-content h3 { margin-top: 0; font-size: 16px; color: #333; border-bottom: 2px solid #6f42c1; padding-bottom: 5px; }
+ .modal-content select { width: 100%; padding: 10px; font-size: 16px; margin: 15px 0; border-radius: 4px; border: 1px solid #ccc; }
+ .modal-btns { display: flex; gap: 10px; }
+ .btn-modal-ok { flex: 2; background: #28a745; color: white; padding: 10px; border-radius: 5px; font-weight: bold; }
+ .btn-modal-ng { flex: 1; background: #6c757d; color: white; padding: 10px; border-radius: 5px; }
+ </style>
 </head>
-
 <body>
+<div class="container">
+ <div id="version">Ver 7.5new</div>
+ <h2>工程管理POPシステム</h2>
+ 
+ <!-- 💡【追加】入力者・設備情報の選択エリア（LocalStorageと連動） -->
+ <div class="login-box">
+   <div class="login-row">
+     <div class="login-col">
+       <label for="select-user">入力担当者</label>
+       <select id="select-user"><option value="">読込中...</option></select>
+     </div>
+     <div class="login-col">
+       <label for="select-machine">担当設備</label>
+       <select id="select-machine"><option value="">担当者を選択</option></select>
+     </div>
+   </div>
+ </div>
+ 
+ <div class="video-wrapper">
+ <video id="video" playsinline></video>
+ <div class="target-line"></div>
+ </div>
 
-    <div class="container">
-        <div id="version">Ver 7.5 (現場最適化版)</div>
-        <h2>工程管理POPシステム</h2>
+ <canvas id="hiddenCanvas"></canvas>
  
-        <div class="video-wrapper">
-            <video id="video" playsinline></video>
-            <div class="target-line"></div>
-        </div>
+ <button id="scanBtn" class="btn-scan">スキャン開始</button>
+ 
+ <div id="resultCard" class="card">
+ <p><strong>読込コード:</strong> <span id="resCode">-</span></p>
+ <p><strong>品名:</strong> <span id="resName">-</span></p>
+ <p><strong>工程名:</strong> <span id="resProcess">-</span></p>
+ <p><strong>進捗状態:</strong> <span id="resStatus">-</span></p>
+ <!-- 💡【追加】選択されたコメントのプレビュー枠 -->
+ <p id="selected-comment-row" style="display:none; color:#6f42c1; font-weight:bold;"><strong>連絡コメント:</strong> <span id="resComment">-</span></p>
+ </div>
+ 
+ <button id="startBtn" class="btn-start">▶ 着手する</button>
+ <button id="completeBtn" class="btn-complete">完了する</button>
+ <!-- 💡【追加】コメント入力専用ボタン -->
+ <button id="commentBtn" class="btn-comment">💬 連絡コメントを追加</button>
+ 
+ <div id="status">システム起動中。マスターを取得しています...</div>
+ 
+ <!-- 中断ボタンエリア -->
+ <div id="manual-trigger-area" style="text-align: center; margin: 15px 0; display: none;">
+ <button type="button" id="btn-cancel-scan" style="background-color: #666; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; width: auto; margin: 0;">
+ スキャンを中断して手入力する
+ </button>
+ </div>
+ 
+ <!-- 手入力フォーム -->
+ <div id="manual-input-form" style="display: none; background: #f5f5f5; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px solid #ccc;">
+ <h3 style="margin-top:0; font-size: 16px; color: #333;">手入力フォーム</h3>
+ <div style="margin-bottom: 10px; text-align: left;">
+ <label style="display:block; font-weight:bold; margin-bottom:5px;">製番 (13桁):</label>
+ <input type="text" id="manual-seiban" maxlength="13" placeholder="13桁の番号を入力" style="width: 100%; padding: 8px; font-size: 16px; box-sizing: border-box;">
+ </div>
+ <div style="margin-bottom: 15px; text-align: left;">
+ <label style="display:block; font-weight:bold; margin-bottom:5px;">工程 (4桁):</label>
+ <input type="text" id="manual-koutei" maxlength="4" placeholder="4桁の番号を入力" style="width: 100%; padding: 8px; font-size: 16px; box-sizing: border-box;">
+ </div>
+ <div style="display: flex; gap: 8px; width: 100%; box-sizing: border-box;">
+ <button type="button" id="btn-manual-submit" style="flex: 3; background-color: #28a745; color: white; padding: 10px 5px; border: none; border-radius: 5px; font-size: 15px; font-weight: bold; white-space: nowrap; margin: 0; width: auto;">この内容で確定</button>
+ <button type="button" id="btn-manual-back" style="flex: 1; background-color: #dc3545; color: white; padding: 10px 5px; border: none; border-radius: 5px; font-size: 15px; font-weight: bold; white-space: nowrap; margin: 0; width: auto;">戻る</button>
+ </div>
+ </div>
+</div>
 
-        <canvas id="hiddenCanvas"></canvas>
- 
-        <!-- ボタンのIDは一貫して scanBtn を使用 -->
-        <button id="scanBtn" class="btn-scan">スキャン開始</button>
- 
-        <div id="resultCard" class="card">
-            <p><strong>読込コード:</strong> <span id="resCode">-</span></p>
-            <p><strong>品名:</strong> <span id="resName">-</span></p>
-            <p><strong>工程名:</strong> <span id="resProcess">-</span></p>
-            <p><strong>進捗状態:</strong> <span id="resStatus">-</span></p>
-        </div>
- 
-        <button id="startBtn" class="btn-start">▶ 着手する</button>
-        <button id="completeBtn" class="btn-complete">完了する</button>
- 
-        <div id="status">ボタンを押してカメラを起動してください</div>
- 
-        <!-- 中断ボタンエリア（重複を排除して綺麗に配置） -->
-        <div id="manual-trigger-area" style="text-align: center; margin: 15px 0;">
-            <button type="button" id="btn-cancel-scan" style="background-color: #666;
-                color: white; padding: 10px 20px; border: none; border-radius: 5px; font-size: 16px;
-                cursor: pointer; width: auto; margin: 0;">
-                スキャンを中断して手入力する
-            </button>
-        </div>
- 
-        <!-- 手入力フォーム（重複を削除し、ボタンをきれいに1行に収まるよう配置） -->
-        <div id="manual-input-form" style="display: none; background: #f5f5f5; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px solid #ccc;">
-            <h3 style="margin-top:0; font-size: 16px; color: #333;">手入力フォーム</h3>
-            <div style="margin-bottom: 10px; text-align: left;">
-                <label style="display:block; font-weight:bold; margin-bottom:5px;">製番 (13桁):</label>
-                <input type="text" id="manual-seiban" maxlength="13" placeholder="13桁の番号を入力" style="width: 100%; padding: 8px; font-size: 16px; box-sizing: border-box;">
-            </div>
-            <div style="margin-bottom: 15px; text-align: left;">
-                <label style="display:block; font-weight:bold; margin-bottom:5px;">工程 (4桁):</label>
-                <input type="text" id="manual-koutei" maxlength="4" placeholder="4桁の番号を入力" style="width: 100%; padding: 8px; font-size: 16px; box-sizing: border-box;">
-            </div>
-            <div style="display: flex; gap: 8px; width: 100%; box-sizing: border-box;">
-                <button type="button" id="btn-manual-submit" style="flex: 3; background-color: #28a745; color: white; padding: 10px 5px; border: none; border-radius: 5px; font-size: 15px; font-weight: bold; white-space: nowrap; margin: 0; width: auto;">
-                    この内容で確定
-                </button>
-                <button type="button" id="btn-manual-back" style="flex: 1; background-color: #dc3545; color: white; padding: 10px 5px; border: none; border-radius: 5px; font-size: 15px; font-weight: bold; white-space: nowrap; margin: 0; width: auto;">
-                    戻る
-                </button>
-            </div>
-        </div>
-    </div>
+<!-- 💡【追加】連絡コメント選択用の子画面（モーダル） -->
+<div id="commentModal" class="modal-overlay">
+ <div class="modal-content">
+   <h3>💬 連絡コメントの選択</h3>
+   <p style="font-size:13px; color:#666; margin:0;">該当する報告内容を選択してください。</p>
+   <select id="modal-comment-select">
+     <option value="">-- 選択してください --</option>
+   </select>
+   <div class="modal-btns">
+     <button type="button" id="btn-modal-submit" class="btn-modal-ok">確定する</button>
+     <button type="button" id="btn-modal-close" class="btn-modal-ng">閉じる</button>
+   </div>
+ </div>
+</div>
 
     <script>
         // GASウェブアプリのURLに書き換えること
