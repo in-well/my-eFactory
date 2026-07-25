@@ -1,490 +1,392 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>スマホによるPOPシステム</title>
-    <!-- バーコード・QRコード読込ライブラリ（html5-qrcode） -->
-    <script src="https://cloudflare.com"></script>
-    <style>
-        body { font-family: sans-serif; margin: 10px; padding: 0; background: #f5f5f5; color: #333; }
-        .row { display: flex; gap: 10px; margin-bottom: 10px; }
-        select { flex: 1; padding: 10px; font-size: 16px; }
-        
-        /* カメラコンテナとスキャンエリア制限（高さ40% 幅80%） */
-        #scanner-container { position: relative; width: 100%; max-width: 400px; height: 250px; margin: 0 auto 10px; overflow: hidden; background: #000; border-radius: 8px; display: none; }
-        #reader { width: 100% !important; height: 100% !important; border: none !important; }
-        #reader video { object-fit: cover !important; width: 100% !important; height: 100% !important; }
-        
-        /* ターゲットラインと外側の暗転マスク（疑似再現） */
-        .mask { position: absolute; box-sizing: border-box; pointer-events: none; }
-        .mask-top { top: 0; left: 0; width: 100%; height: 30%; background: rgba(0,0,0,0.6); }
-        .mask-bottom { bottom: 0; left: 0; width: 100%; height: 30%; background: rgba(0,0,0,0.6); }
-        .mask-left { top: 30%; left: 0; width: 10%; height: 40%; background: rgba(0,0,0,0.6); }
-        .mask-right { top: 30%; right: 0; width: 10%; height: 40%; background: rgba(0,0,0,0.6); }
-        .target-line { position: absolute; top: 50%; left: 10%; width: 80%; height: 2px; background: red; transform: translateY(-50%); pointer-events: none; }
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>工程管理POPシステム</title>
+ <!-- バーコード・QRコード読込ライブラリ（html5-qrcode）の正しいCDN URLに変更 -->
+ <script src="https://cloudflare.com"></script>
+ <style>
+ body { font-family: sans-serif; margin: 0; padding: 15px; background: #f4f6f9; color: #333; text-align: center; }
+ .container { max-width: 500px; margin: 0 auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+ #version { font-size: 12px; color: #999; text-align: right; margin-bottom: 5px; }
+ h2 { margin-top: 5px; margin-bottom: 15px; font-size: 20px; }
+ 
+ /* 💡【追加】ログイン情報・マスター選択エリア */
+ .login-box { background: #e2f0d9; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: left; border: 1px solid #b5d99c; }
+ .login-row { display: flex; gap: 8px; margin-bottom: 8px; }
+ .login-col { flex: 1; }
+ .login-col label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 3px; color: #2e7d32; }
+ .login-box select { width: 100%; padding: 8px; font-size: 14px; border-radius: 4px; border: 1px solid #99c286; background: white; }
+ 
+ .video-wrapper { position: relative; width: 100%; max-width: 400px; max-height: 35vh; margin: 0 auto 10px; border-radius: 8px; overflow: hidden; background: #222; }
+ video { width: 100%; display: block; }
+ .target-line { position: absolute; top: 30%; left: 5%; width: 90%; height: 40%; border: 3px dashed #ff3333; box-sizing: border-box; pointer-events: none; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4); }
+ 
+ .card { background: #e9ecef; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left; display: none; }
+ .card p { margin: 8px 0; font-size: 16px; }
+ button { width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
+ .btn-scan { background: #007bff; color: white; }
+ .btn-start { background: #28a745; color: white; display: none; }
+ .btn-complete { background: #fd7e14; color: white; display: none; }
+ 
+ /* 💡【追加】コメント追加ボタン */
+ .btn-comment { background: #6f42c1; color: white; margin-top: 5px; display: none; }
+ 
+ #status { font-weight: bold; margin-top: 15px; padding: 10px; border-radius: 6px; background: #fff3cd; color: #333; font-size: 15px; }
+ canvas { display: none; }
 
-        button { width: 100%; padding: 12px; font-size: 16px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        .btn-primary { background: #007bff; color: white; }
-        .btn-sub { background: #6c757d; color: white; padding: 5px 10px; width: auto; font-size: 14px; }
-        
-        #info-panel { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-top: 10px; display: none; }
-        .info-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-        .info-label { font-weight: bold; color: #666; }
-        
-        #action-panel { display: none; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 15px; }
-        .btn-action { color: white; }
-        .btn-start { background: #28a745; }
-        .btn-complete { background: #17a2b8; }
-        .btn-break { background: #ffc107; color: #333; }
-        .btn-cancel { background: #dc3545; }
-
-        #msg-panel { margin-top: 10px; padding: 10px; border-radius: 5px; background: #e9ecef; font-weight: bold; text-align: center; font-size: 14px; }
-        
-        /* モーダル（子画面） */
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
-        .modal-content { background: white; padding: 20px; border-radius: 8px; width: 85%; max-width: 350px; max-height: 80%; overflow-y: auto; }
-        .modal-item { padding: 12px; border-bottom: 1px solid #ddd; cursor: pointer; font-size: 16px; }
-        .modal-item:hover { background: #f0f0f0; }
-    </style>
+ /* 💡【追加】連絡コメント選択用の子画面（モーダルウィンドウ） */
+ .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; display: none; }
+ .modal-content { background: white; padding: 20px; border-radius: 10px; width: 85%; max-width: 400px; text-align: left; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+ .modal-content h3 { margin-top: 0; font-size: 16px; color: #333; border-bottom: 2px solid #6f42c1; padding-bottom: 5px; }
+ .modal-content select { width: 100%; padding: 10px; font-size: 16px; margin: 15px 0; border-radius: 4px; border: 1px solid #ccc; }
+ .modal-btns { display: flex; gap: 10px; }
+ .btn-modal-ok { flex: 2; background: #28a745; color: white; padding: 10px; border-radius: 5px; font-weight: bold; }
+ .btn-modal-ng { flex: 1; background: #6c757d; color: white; padding: 10px; border-radius: 5px; }
+ </style>
 </head>
 <body>
+<div class="container">
+ <div id="version">Ver 7.5new</div>
+ <h2>工程管理POPシステム</h2>
+ 
+ <!-- 💡【追加】入力者・設備情報の選択エリア（LocalStorageと連動） -->
+ <div class="login-box">
+   <div class="login-row">
+     <div class="login-col">
+       <label for="select-user">入力担当者</label>
+       <select id="select-user"><option value="">読込中...</option></select>
+     </div>
+     <div class="login-col">
+       <label for="select-machine">担当設備</label>
+       <select id="select-machine"><option value="">担当者を選択</option></select>
+     </div>
+   </div>
+ </div>
+ 
+ <div class="video-wrapper">
+ <video id="video" playsinline></video>
+ <div class="target-line"></div>
+ </div>
 
-    <!-- 1. 担当選択 -->
-    <div class="row">
-        <select id="select-user"><option value="">担当者を選択</option></select>
-        <select id="select-device"><option value="">設備を選択</option></select>
-    </div>
+ <canvas id="hiddenCanvas"></canvas>
+ 
+ <button id="scanBtn" class="btn-scan">スキャン開始</button>
+ 
+ <div id="resultCard" class="card">
+ <p><strong>読込コード:</strong> <span id="resCode">-</span></p>
+ <p><strong>品名:</strong> <span id="resName">-</span></p>
+ <p><strong>工程名:</strong> <span id="resProcess">-</span></p>
+ <p><strong>進捗状態:</strong> <span id="resStatus">-</span></p>
+ <!-- 💡【追加】選択されたコメントのプレビュー枠 -->
+ <p id="selected-comment-row" style="display:none; color:#6f42c1; font-weight:bold;"><strong>連絡コメント:</strong> <span id="resComment">-</span></p>
+ </div>
+ 
+ <button id="startBtn" class="btn-start">▶ 着手する</button>
+ <button id="completeBtn" class="btn-complete">完了する</button>
+ <!-- 💡【追加】コメント入力専用ボタン -->
+ <button id="commentBtn" class="btn-comment">💬 連絡コメントを追加</button>
+ 
+ <div id="status">システム起動中。マスターを取得しています...</div>
+ 
+ <!-- 中断ボタンエリア -->
+ <div id="manual-trigger-area" style="text-align: center; margin: 15px 0; display: none;">
+ <button type="button" id="btn-cancel-scan" style="background-color: #666; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; width: auto; margin: 0;">
+ スキャンを中断して手入力する
+ </button>
+ </div>
+ 
+ <!-- 手入力フォーム -->
+ <div id="manual-input-form" style="display: none; background: #f5f5f5; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px solid #ccc;">
+ <h3 style="margin-top:0; font-size: 16px; color: #333;">手入力フォーム</h3>
+ <div style="margin-bottom: 10px; text-align: left;">
+ <label style="display:block; font-weight:bold; margin-bottom:5px;">製番 (13桁):</label>
+ <input type="text" id="manual-seiban" maxlength="13" placeholder="13桁の番号を入力" style="width: 100%; padding: 8px; font-size: 16px; box-sizing: border-box;">
+ </div>
+ <div style="margin-bottom: 15px; text-align: left;">
+ <label style="display:block; font-weight:bold; margin-bottom:5px;">工程 (4桁):</label>
+ <input type="text" id="manual-koutei" maxlength="4" placeholder="4桁の番号を入力" style="width: 100%; padding: 8px; font-size: 16px; box-sizing: border-box;">
+ </div>
+ <div style="display: flex; gap: 8px; width: 100%; box-sizing: border-box;">
+ <button type="button" id="btn-manual-submit" style="flex: 3; background-color: #28a745; color: white; padding: 10px 5px; border: none; border-radius: 5px; font-size: 15px; font-weight: bold; white-space: nowrap; margin: 0; width: auto;">この内容で確定</button>
+ <button type="button" id="btn-manual-back" style="flex: 1; background-color: #dc3545; color: white; padding: 10px 5px; border: none; border-radius: 5px; font-size: 15px; font-weight: bold; white-space: nowrap; margin: 0; width: auto;">戻る</button>
+ </div>
+ </div>
+</div>
 
-    <!-- 2. カメラモニター -->
-    <div id="scanner-container">
-        <div id="reader"></div>
-        <div class="mask mask-top"></div>
-        <div class="mask mask-bottom"></div>
-        <div class="mask mask-left"></div>
-        <div class="mask mask-right"></div>
-        <div class="target-line"></div>
-    </div>
-
-    <!-- 3. スキャン開始ボタン -->
-    <button id="btn-scan-ctrl" class="btn-primary">スキャン開始</button>
-
-    <!-- 5. メッセージ表示 -->
-    <div id="msg-panel">担当者と設備を選択してください。</div>
-
-    <!-- 4. 工程情報 -->
-    <div id="info-panel">
-        <div class="info-item"><span class="info-label">管理コード:</span><span id="lbl-code">-</span></div>
-        <div class="info-item">
-            <div><span class="info-label">工程コード:</span> <span id="lbl-proc-code">-</span></div>
-            <button id="btn-select-proc" class="btn-sub" style="display:none;">選択</button>
-        </div>
-        <div class="info-item">
-            <div><span class="info-label">工順:</span> <span id="lbl-seq">-</span></div>
-            <button id="btn-select-seq" class="btn-sub">選択</button>
-        </div>
-        <div class="info-item"><span class="info-label">品名:</span><span id="lbl-name">-</span></div>
-        <div class="info-item">
-            <div><span class="info-label">設備名:</span> <span id="lbl-device">-</span></div>
-            <button id="btn-select-device" class="btn-sub">選択</button>
-        </div>
-        <div class="info-item"><span class="info-label">進捗状況:</span><span id="lbl-status">-</span></div>
-        
-        <!-- ⑦ 次アクションボタン -->
-        <div id="action-panel">
-            <button class="btn-action btn-start" onclick="updateStatus('着手')">着手</button>
-            <button class="btn-action btn-complete" onclick="updateStatus('完了')">完了</button>
-            <button class="btn-action btn-break" onclick="updateStatus('中断')">中断</button>
-            <button class="btn-action btn-cancel" onclick="handleCancel()">ｷｬﾝｾﾙ</button>
-        </div>
-    </div>
-
-    <!-- 子画面（モーダル） -->
-    <div id="modal" class="modal">
-        <div class="modal-content">
-            <h3 id="modal-title" style="margin-top:0;">選択してください</h3>
-            <div id="modal-list"></div>
-            <button class="btn-cancel" style="margin-top:10px;" onclick="closeModal()">閉じる</button>
-        </div>
-    </div>
+<!-- 💡【追加】連絡コメント選択用の子画面（モーダル） -->
+<div id="commentModal" class="modal-overlay">
+ <div class="modal-content">
+   <h3>💬 連絡コメントの選択</h3>
+   <p style="font-size:13px; color:#666; margin:0;">該当する報告内容を選択してください。</p>
+   <select id="modal-comment-select">
+     <option value="">-- 選択してください --</option>
+   </select>
+   <div class="modal-btns">
+     <button type="button" id="btn-modal-submit" class="btn-modal-ok">確定する</button>
+     <button type="button" id="btn-modal-close" class="btn-modal-ng">閉じる</button>
+   </div>
+ </div>
+</div>
 
     <script>
-
-        // === 1. グローバル変数と初期設定 ===
-        const GAS_DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxN_cuvxfL4syq67FGPZ9eS0EOpelD3zUPjbc_iGjUixLzUMJKArnIJ2jUOQOWTZQTZ/exec"; // ※実際のGASデプロイURLに書き換える
-        let html5QrcodeScanner = null;
-        let currentScanData = null; // 現在読込中のデータを保持
+        // GASウェブアプリのURLに書き換えること
+        const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbx-cQhFADyb_S2jWMZO6XWsScrWlqK8Ay6Y-Nryz5NkU2ik_O-bnNoT9fc0zOgoX8_d/exec";
+ 
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('hiddenCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusDiv = document.getElementById('status');
+    
+        let localStream = null;
         let isScanning = false;
+        let barcodeDetector = null;
+        let savedSeiban = null;       // 13桁の製番を一時保存する
+        let finalCodeToSend = null;   // GASに送信する最終ｷｰｺｰﾄﾞ
 
-        // DOM要素の取得
-        const selectUser = document.getElementById('select-user');
-        const selectDevice = document.getElementById('select-device');
-        const scannerContainer = document.getElementById('scanner-container');
-        const btnScanCtrl = document.getElementById('btn-scan-ctrl');
-        const msgPanel = document.getElementById('msg-panel');
-        const infoPanel = document.getElementById('info-panel');
-
-        // 工程情報表示用ラベル
-        const lblCode = document.getElementById('lbl-code');
-        const lblProcCode = document.getElementById('lbl-proc-code');
-        const btnSelectProc = document.getElementById('btn-select-proc');
-        const lblSeq = document.getElementById('lbl-seq');
-        const btnSelectSeq = document.getElementById('btn-select-seq');
-        const lblName = document.getElementById('lbl-name');
-        const lblDevice = document.getElementById('lbl-device');
-        const btnSelectDevice = document.getElementById('btn-select-device');
-        const lblStatus = document.getElementById('lbl-status');
-        const actionPanel = document.getElementById('action-panel');
-
-        // モーダル要素
-        const modal = document.getElementById('modal');
-        const modalTitle = document.getElementById('modal-title');
-        const modalList = document.getElementById('modal-list');
-
-        // === 2. 画面起動時の初期化処理 ===
-        window.addEventListener('DOMContentLoaded', async () => {
-            // ローカルストレージから前回選択情報を復元
-            const savedUser = localStorage.getItem('pop_user');
-            const savedDevice = localStorage.getItem('pop_device');
+        function updateLog(msg, color = "#333", bg = "#fff3cd") {
+            statusDiv.style.color = color;
+            statusDiv.style.backgroundColor = bg;
+            statusDiv.innerHTML = msg;
+        }
+ 
+        window.addEventListener('DOMContentLoaded', () => {
+            if ('BarcodeDetector' in window) {
+                barcodeDetector = new BarcodeDetector({ formats: ['qr_code', 'ean_13', 'code_128'] });
+            } else {
+                updateLog("お使いのブラウザは標準スキャン機能に未対応です。", "red", "#f8d7da");
+            }
+        });
+ 
+        document.getElementById('scanBtn').addEventListener('click', async () => {
+            document.getElementById('resultCard').style.display = "none";
+            document.getElementById('startBtn').style.display = "none";
+            document.getElementById('completeBtn').style.display = "none";
+            document.getElementById('manual-trigger-area').style.display = "block"; // スキャン開始時に表示
             
-            // メッセージの初期化
-            msgPanel.textContent = "マスタ情報を取得中...";
-            
+            // 変数のリセット
+            savedSeiban = null;
+            finalCodeToSend = null;
+ 
+            updateLog("⏳カメラを起動中...");
+
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
             try {
-                // GASからマスタデータを取得
-                const response = await fetch(`${GAS_DEPLOY_URL}?action=getMaster`);
-                const masterData = await response.json();
-                
-                // 担当者プルダウンの生成
-                masterData.users.forEach(user => {
-                    const opt = document.createElement('option');
-                    opt.value = user.name;
-                    opt.textContent = user.name;
-                    // 担当者毎に紐づく設備マスタをデータ属性に保持（カンマ区切り文字列）
-                    opt.dataset.devices = user.devices; 
-                    opt.dataset.changeDevices = user.changeDevices;
-                    selectUser.appendChild(opt);
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment" },
+                    audio: false
                 });
-
-                // コメントリストはローカルストレージ等に一時保存（ステータス更新時に使用）
-                localStorage.setItem('pop_comments', JSON.stringify(masterData.comments || []));
-
-                // 前回値の復元処理
-                if (savedUser) {
-                    selectUser.value = savedUser;
-                    updateDeviceDropdown(); // 設備プルダウンを連動更新
-                    if (savedDevice) selectDevice.value = savedDevice;
-                }
-                
-                checkSelectionStatus();
-            } catch (error) {
-                showError("マスタの取得に失敗しました。再読み込みしてください。");
-            }
-        });
-
-        // 担当者変更時に設備プルダウンを連動させる
-        selectUser.addEventListener('change', () => {
-            updateDeviceDropdown();
-            saveSelection();
-            checkSelectionStatus();
-        });
-
-        selectDevice.addEventListener('change', () => {
-            saveSelection();
-            checkSelectionStatus();
-        });
-
-        // 設備プルダウンの動的更新
-        function updateDeviceDropdown() {
-            selectDevice.innerHTML = '<option value="">設備を選択</option>';
-            const selectedOpt = selectUser.selectedOptions[0];
-            if (!selectedOpt || !selectedOpt.value) return;
-            
-            // カンマ区切りの設備名をパースして追加
-            const devices = selectedOpt.dataset.devices ? selectedOpt.dataset.devices.split(',') : [];
-            devices.forEach(dev => {
-                const opt = document.createElement('option');
-                opt.value = dev.trim();
-                opt.textContent = dev.trim();
-                selectDevice.appendChild(opt);
-            });
-        }
-
-        function saveSelection() {
-            localStorage.setItem('pop_user', selectUser.value);
-            localStorage.setItem('pop_device', selectDevice.value);
-        }
-
-        function checkSelectionStatus() {
-            if (selectUser.value && selectDevice.value) {
-                msgPanel.textContent = "「スキャン開始」ボタンを押してください。";
-                btnScanCtrl.style.display = "block";
-            } else {
-                msgPanel.textContent = "担当者と設備を選択してください。";
-                btnScanCtrl.style.display = "none";
-                stopCamera();
-            }
-        }
-
-        // === 3. カメラコントロール（Html5Qrcodeを使用） ===
-        btnScanCtrl.addEventListener('click', () => {
-            if (isScanning) {
-                stopCamera();
-            } else {
-                startCamera();
-            }
-        });
-
-        function startCamera() {
-            scannerContainer.style.display = "block";
-            infoPanel.style.display = "none"; // スキャン前は工程情報を非表示
-            
-            html5QrcodeScanner = new Html5Qrcode("reader");
-            const config = { fps: 10, qrbox: (width, height) => ({ width: width * 0.8, height: height * 0.4 }) };
-            
-            html5QrcodeScanner.start(
-                { facingMode: "environment" },
-                config,
-                onScanSuccess,
-                onScanFailure
-            ).then(() => {
+ 
+                video.srcObject = localStream;
+                await video.play();
+ 
                 isScanning = true;
-                btnScanCtrl.textContent = "スキャン停止";
-                msgPanel.textContent = "バーコードまたはQRコードをかざしてください。";
-            }).catch(err => {
-                showError("カメラの起動に失敗しました。");
-            });
-        }
+                updateLog("📷 <strong>[1回目スキャン]</strong><br>QR(11桁) または 製番バーコード(13桁)を映してください", "#0056b3", "#e8f4fd");
+                detectLoop();
 
-        function stopCamera() {
-            if (html5QrcodeScanner && isScanning) {
-                html5QrcodeScanner.stop().then(() => {
-                    isScanning = false;
-                    scannerContainer.style.display = "none";
-                    btnScanCtrl.textContent = currentScanData ? "次のスキャン" : "スキャン開始";
-                }).catch(err => console.error(err));
+            } catch (err) {
+                updateLog("❌ カメラ起動エラー: " + err.name, "red", "#f8d7da"); 
             }
-        }
-
-        // === 4. スキャン成功時の判定とGAS通信 ===
-        function onScanSuccess(decodedText, decodedResult) {
-            const code = decodedText.trim();
-            
-            // すでに13桁が読み込まれており、追加で「工程コード(3〜4桁)」または「工順(1〜2桁)」を待っている場合
-            if (currentScanData && currentScanData.length === 13) {
-                if (code.length >= 1 && code.length <= 4) {
-                    fetchProcessInfo(`${currentScanData},${code}`);
-                    return;
-                }
-            }
-            
-            // 初回コード読み取り（11桁：QRコード / 13桁：バーコード）
-            if (code.length === 11 || code.length === 13) {
-                currentScanData = code;
-                fetchProcessInfo(code);
-            }
-        }
-
-        function onScanFailure(error) {
-            // 読み取りエラーはコンソールのみに流し、画面表示は阻害しない
-        }
-
-        // GASへのデータ照合リクエスト
-        async function fetchProcessInfo(codeParam) {
-            msgPanel.textContent = "データ照合中...";
-            try {
-                const response = await fetch(`${GAS_DEPLOY_URL}?action=checkData&code=${encodeURIComponent(codeParam)}`);
-                const result = await response.json();
-                
-                if (result.status === "該当なし") {
-                    msgPanel.textContent = "該当する工程情報が見つかりません。";
-                    return;
-                }
-                
-                // データの表示更新
-                displayProcessInfo(result.data);
-                
-            } catch (error) {
-                showError("通信エラーが発生しました。");
-            }
-        }
-
-        // 取得データの画面反映
-        function displayProcessInfo(data) {
-            infoPanel.style.display = "block";
-            
-            lblCode.textContent = data.manageCode || "-";
-            lblProcCode.textContent = data.procCode || "-";
-            lblSeq.textContent = data.seq || "-";
-            lblName.textContent = data.partName || "-";
-            lblDevice.textContent = data.deviceName || "-";
-            lblStatus.textContent = data.status || "未設定";
-            
-            // コード桁数による動的制御
-            if (currentScanData.length === 11) {
-                // 11桁(QR): カメラ停止、進捗選択を待つ
-                stopCamera();
-                btnSelectProc.style.display = "none";
-                actionPanel.style.display = "grid";
-                msgPanel.textContent = "進捗状況を選択してください。";
-            } else if (currentScanData.length === 13) {
-                // 13桁(バーコード): カメラは止めず、工程コードスキャンまたは手動選択を待つ
-                btnSelectProc.style.display = "inline-block";
-                actionPanel.style.display = "grid"; // 仮特定状態でもアクションは可能とする
-                msgPanel.textContent = "工程コードをスキャンするか、選択ボタンで工程を選択してください。";
-            }
-        }
-
-        // === 5. 手動選択ボタン群（子画面モーダル制御） ===
-        // 工程コード「選択」
-        btnSelectProc.addEventListener('click', () => openSubWindow('procCode'));
-        // 工順「選択」
-        btnSelectSeq.addEventListener('click', () => openSubWindow('seq'));
-        // 設備名「選択」
-        btnSelectDevice.addEventListener('click', () => openSubWindow('device'));
-
-        async function openSubWindow(type) {
-            // バーコード読込中の場合は一旦停止
-            if (isScanning && currentScanData.length === 13) {
-                stopCamera();
-            }
-            
-            modalList.innerHTML = "読込中...";
-            modal.style.display = "flex";
-            
-            if (type === 'procCode' || type === 'seq') {
-                modalTitle.textContent = type === 'procCode' ? "工程コード選択" : "工順選択";
+        });
+ 
+        async function detectLoop() {
+            if (!isScanning) return;
+            if (video.readyState === video.HAVE_ENOUGH_DATA && barcodeDetector) {
                 try {
-                    // 仕掛情報から未完工程リストを抽出リクエスト
-                    const response = await fetch(`${GAS_DEPLOY_URL}?action=getUnfinished&code=${currentScanData}`);
-                    const result = await response.json();
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     
-                    modalList.innerHTML = "";
-                    result.list.forEach(item => {
-                        const div = document.createElement('div');
-                        div.className = "modal-item";
-                        // 表示テキスト例：「001 (工順1)」「4002 (工順2)」
-                        div.textContent = type === 'procCode' ? `${item.procCode} (${item.procName})` : `工順: ${item.seq} (${item.procName})`;
-                        div.onclick = () => {
-                            const param = type === 'procCode' ? item.procCode : item.seq;
-                            fetchProcessInfo(`${currentScanData},${param}`);
-                            closeModal();
-                        };
-                        modalList.appendChild(div);
-                    });
-                } catch (e) {
-                    modalList.innerHTML = "データ抽出に失敗しました。";
-                }
-            } else if (type === 'device') {
-                modalTitle.textContent = "変更設備名選択";
-                modalList.innerHTML = "";
-                
-                // 選択中の担当者に紐づく「変更設備名マスタ」をプルダウンの独自属性から取得
-                const selectedOpt = selectUser.selectedOptions[0];
-                const changeDevices = selectedOpt.dataset.changeDevices ? selectedOpt.dataset.changeDevices.split(',') : [];
-                
-                changeDevices.forEach(dev => {
-                    const div = document.createElement('div');
-                    div.className = "modal-item";
-                    div.textContent = dev.trim();
-                    div.onclick = () => {
-                        lblDevice.textContent = dev.trim(); // 画面上の表示を一時変更（更新時に適用）
-                        closeModal();
-                        // バーコード用にカメラを再開させる場合はここで判定
-                        if (currentScanData.length === 13) startCamera();
-                    };
-                    modalList.appendChild(div);
-                });
-            }
-        }
-
-        function closeModal() {
-            modal.style.display = "none";
-            // 13桁バーコード処理中の場合はカメラを再開
-            if (currentScanData && currentScanData.length === 13 && !isScanning) {
-                startCamera();
-            }
-        }
-
-        // === 6. 進捗更新処理とキャンセルのアクション ===
-        async function updateStatus(statusValue) {
-            // マスターの「コメント」選択モーダルを開く
-            const comments = JSON.parse(localStorage.getItem('pop_comments') || "[]");
-            modalTitle.textContent = "コメントを選択してください";
-            modalList.innerHTML = "";
-
-            // コメント選択後の最終更新処理関数
-            const executeUpdate = async (commentText) => {
-                closeModal();
-                msgPanel.textContent = "データ更新中...";
-                const updateData = {
-                    manageCode: lblCode.textContent,
-                    procCode: lblProcCode.textContent,
-                    seq: lblSeq.textContent,
-                    status: statusValue,
-                    user: selectUser.value,
-                    currentDevice: lblDevice.textContent,
-                    comment: commentText
-                };
-
-                try {
-                    const response = await fetch(GAS_DEPLOY_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'updateStatus', data: updateData })
-                    });
-                    const result = await response.json();
-                    if (result.success) {
-                        lblStatus.textContent = statusValue;
-                        msgPanel.textContent = "更新が完了しました。";
-                        setTimeout(resetToNextScan, 1500);
-                    } else {
-                        showError("更新できませんでした。");
+                    const trimHeight = canvas.height * 0.40;
+                    const trimTop = (canvas.height - trimHeight) / 2;
+                    const trimmedData = ctx.getImageData(0, trimTop, canvas.width, trimHeight);
+                    
+                    canvas.height = trimHeight;
+                    ctx.putImageData(trimmedData, 0, 0);
+                    const barcodes = await barcodeDetector.detect(canvas);
+                    
+                    if (barcodes.length > 0) {
+                        const readText = barcodes[0].rawValue.trim(); 
+                        const digit = readText.length;
+                        // 条件分岐1:QRｺｰﾄﾞ(11桁)が読めた場合　⇒　一発で終了
+                        if (digit === 11 && !savedSeiban) {
+                            isScanning = false;
+                            finalCodeToSend = readText;
+                            stopCamera();
+                            handleScanSuccess(finalCodeToSend);
+                            return;
+                        }
+                        // 条件分岐2:1回目のﾊﾞｰｺｰﾄﾞ(13桁)が読めた場合　⇒　2回目モードへ
+                        if (digit === 13 && !savedSeiban) {
+                            // ピッと音を鳴らす
+                            try {
+                                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                                const oscillator = audioCtx.createOscillator();
+                                const gainNode = audioCtx.createGain();
+                                oscillator.type = 'sine'; 
+                                oscillator.frequency.setValueAtTime(2000, audioCtx.currentTime); 
+                                gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); 
+                                oscillator.connect(gainNode);
+                                gainNode.connect(audioCtx.destination);
+                                oscillator.start();
+                                oscillator.stop(audioCtx.currentTime + 0.1); 
+                            } catch (e) {
+                                console.log("Audio error:", e);
+                            }
+                            // 製番情報をｷｰﾌﾟ
+                            savedSeiban = readText; 
+                            updateLog(`▶ 製番[${savedSeiban}]を保存しました<br>続けて<strong>工程コード(4桁)</strong>を赤線に映してください`, "#2e7d32", "#e2f0d9");
+                            // 連続ｽｷｬﾝ時の即時誤読を防ぐため、1.5秒待つ    
+                            await new Promise(resolve => setTimeout(resolve, 1500));
+                        }
+                        // 条件分岐3:2回目の工程ｺｰﾄﾞ(4桁)が読めた場合　⇒　送信へ
+                        if (digit === 4 && savedSeiban) {
+                            isScanning = false;
+                            // GAS側で処理しやすいよう、カンマ区切りのﾃﾞｰﾀにする
+                            finalCodeToSend = `${savedSeiban},${readText}`;
+                            stopCamera();
+                            handleScanSuccess(finalCodeToSend);
+                            return;
+                        }
                     }
-                } catch (error) {
-                    showError("通信エラーにより更新に失敗しました。");
+                } catch (e) {
+                    console.error(e);
                 }
-            };
+            }
+            requestAnimationFrame(detectLoop);
+        }
+ 
+        // ボタン操作や手入力を処理する
+        document.addEventListener('DOMContentLoaded', () => {
+            const btnCancel = document.getElementById('btn-cancel-scan');
+            const btnManualSubmit = document.getElementById('btn-manual-submit');
+            const btnManualBack = document.getElementById('btn-manual-back');
+            const manualForm = document.getElementById('manual-input-form');
+            const triggerArea = document.getElementById('manual-trigger-area');
+            const videoWrapper = document.querySelector('.video-wrapper'); 
+            const scanBtn = document.getElementById('scanBtn');
 
-            // コメント選択肢の生成
-            comments.forEach(comment => {
-                const div = document.createElement('div');
-                div.className = "modal-item";
-                div.textContent = comment;
-                div.onclick = () => executeUpdate(comment);
-                modalList.appendChild(div);
+            // 1:ｽｷｬﾝ中断をｸﾘｯｸしたとき
+            btnCancel.addEventListener('click', () => {
+                isScanning = false; 
+                if (videoWrapper) videoWrapper.style.display = 'none'; 
+                triggerArea.style.display = 'none'; 
+                scanBtn.style.display = 'none'; // 手入力時は開始ボタンも隠す
+                manualForm.style.display = 'block'; 
+                document.getElementById('manual-seiban').value = savedSeiban || "";
             });
 
-            // コメントなしの選択肢を追加
-            const noCommentDiv = document.createElement('div');
-            noCommentDiv.className = "modal-item";
-            noCommentDiv.textContent = "コメントなし";
-            noCommentDiv.style.fontStyle = "italic";
-            noCommentDiv.onclick = () => executeUpdate("");
-            modalList.appendChild(noCommentDiv);
-            modal.style.display = "flex";
+            // 2:手入力をｸﾘｯｸしたとき
+            btnManualBack.addEventListener('click', () => {
+                manualForm.style.display = 'none';
+                if (videoWrapper) videoWrapper.style.display = 'block';
+                triggerArea.style.display = 'block';
+                scanBtn.style.display = 'block';
+                isScanning = true; 
+                detectLoop(); 
+            });
+
+            // 3:手入力完了「確定する」をｸﾘｯｸしたとき
+            btnManualSubmit.addEventListener('click', () => {
+                const seibanVal = document.getElementById('manual-seiban').value.trim();
+                const kouteiVal = document.getElementById('manual-koutei').value.trim();
+                // 桁数ﾁｪｯｸ
+                if (seibanVal.length !== 13) {
+                    alert('製番は13桁で入力してください。');
+                    return;
+                }
+                if (kouteiVal.length !== 4 && kouteiVal.length !== 3) {
+                    alert('工程は3または4桁で入力してください。');
+                    return;
+                }
+                alert(`手入力データを確定しました。\n製番: ${seibanVal}\n工程: ${kouteiVal}`);
+                finalCodeToSend = `${seibanVal},${kouteiVal}`;
+                manualForm.style.display = 'none';
+                handleScanSuccess(finalCodeToSend);
+            });
+        });
+ 
+        function stopCamera() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
         }
-            
-        function handleCancel() {
-            resetToNextScan();
+ 
+        // 3.ｽｷｬﾝ成功時：GASへ照合リクエスト
+        function handleScanSuccess(scannedData) {
+            updateLog(`⏳読込成功 [${scannedData}]<br>注残データと照合中...`); 
+ 
+            const url = `${GAS_ENDPOINT}?action=check&code=${encodeURIComponent(scannedData)}`;
+ 
+            fetch(url)
+             .then(res => res.json())
+             .then(data => {
+                if (data.result === "success") {
+                    document.getElementById('resCode').innerText = finalCodeToSend;
+                    document.getElementById('resName').innerText = data.data.name;
+                    document.getElementById('resProcess').innerText = data.data.process;
+                    document.getElementById('resStatus').innerText = data.data.status || "未着手";
+                    document.getElementById('resultCard').style.display = "block";
+                    document.getElementById('startBtn').style.display = "block";
+                    document.getElementById('completeBtn').style.display = "block";
+                    // 【ここを修正】「照合完了」時に不要なボタン・エリアを完全に消去
+                    document.getElementById('manual-trigger-area').style.display = "none";
+                    document.getElementById('manual-input-form').style.display = "none";
+                    // ボタンのテキストを「次のスキャン」に切り替えて表示させておく
+                    const scanBtn = document.getElementById('scanBtn');
+                    scanBtn.innerText = "次のスキャン";
+                    scanBtn.style.display = "block";
+                    updateLog("✅ 照合完了。操作を選択してください。", "#155724", "#d4edda");
+                } else {
+                    updateLog("❌ 注残データに登録がありません。", "#721c24", "#f8d7da");
+                }
+            })
+             .catch(err => {
+                updateLog("❌ GAS照合通信エラー: " + err.message, "red", "#f8d7da");
+            });
         }
 
-        function resetToNextScan() {
-            currentScanData = null;
-            infoPanel.style.display = "none";
-            btnScanCtrl.textContent = "次の製番スキャン";
-            msgPanel.textContent = "次の製番をスキャンしてください。";
-            startCamera();
-        }
+        // 4.[着手][完了]ﾃﾞｰﾀ書き込み
+        document.getElementById('startBtn').addEventListener('click', () => updateStatus('着手'));
+        document.getElementById('completeBtn').addEventListener('click', () => updateStatus('完了'));
 
-        function showError(message) {
-            msgPanel.textContent = message;
-            msgPanel.style.color = "red";
-            setTimeout(() => { 
-                msgPanel.style.color = "#333"; 
-            }, 5000);
+        function updateStatus(statusType) {
+            updateLog(`⏳ ${statusType}情報を送信中...`);
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('completeBtn').disabled = true;
+            fetch(GAS_ENDPOINT, {
+                method: "POST",
+                headers: { "Content-Type": "text/plain" },
+                body: JSON.stringify({
+                    action: "update",
+                    code: finalCodeToSend,
+                    status: statusType
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.result === "success") {
+                    updateLog(`🎉 <strong>ステータスを【${statusType}】に更新しました！</strong>`, "#155724", "#d4edda");
+                    document.getElementById('resStatus').innerText = statusType;
+                    // ステータス更新完了後、次の処理のためにボタンをすっきりさせる
+                    document.getElementById('startBtn').style.display = "none";
+                    document.getElementById('completeBtn').style.display = "none";
+                } else {
+                    updateLog("スプレッドシートの更新に失敗しました。", "red", "#f8d7da");
+                }
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('completeBtn').disabled = false;
+            })
+            .catch(err => {
+                updateLog("更新送信エラー: " + err.message, "red", "#f8d7da");
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('completeBtn').disabled = false;
+            });
         }
-
     </script>
 </body>
 </html>
