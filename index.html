@@ -3,48 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>スマホによるPOPシステム ver7.0</title>
+    <title>スマホによるPOPシステム ver7.1</title>
     <!-- バーコード・QRコード読込ライブラリ（html5-qrcode） -->
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
-        body { font-family: sans-serif; margin: 10px; padding: 0; background: #f5f5f5; color: #333; }
-        .row { display: flex; gap: 10px; margin-bottom: 10px; }
-        select { flex: 1; padding: 10px; font-size: 16px; }
-        
-        /* カメラコンテナとスキャンエリア制限（高さ40% 幅80%） */
-        #scanner-container { position: relative; width: 100%; max-width: 400px; height: 250px; margin: 0 auto 10px;overflow: hidden; background: #000; border-radius: 8px; display: none; } 
-        #reader { width: 100% !important; height: 100% !important; border: none !important; }
-        #reader video { object-fit: cover !important; width: 100% !important; height: 100% !important; }
-        
-        /* ターゲットラインと外側の暗転マスク（疑似再現） */
-        .mask { position: absolute; box-sizing: border-box; pointer-events: none; }
-        .mask-top { top: 0; left: 0; width: 100%; height: 30%; background: rgba(0,0,0,0.6); }
-        .mask-bottom { bottom: 0; left: 0; width: 100%; height: 30%; background: rgba(0,0,0,0.6); }
-        .mask-left { top: 30%; left: 0; width: 10%; height: 40%; background: rgba(0,0,0,0.6); }
-        .mask-right { top: 30%; right: 0; width: 10%; height: 40%; background: rgba(0,0,0,0.6); }
-        .target-line { position: absolute; top: 50%; left: 10%; width: 80%; height: 2px; background: red; transform: translateY(-50%); pointer-events: none; }
-        button { width: 100%; padding: 12px; font-size: 16px; border: none; border-radius: 5px;cursor: pointer; font-weight: bold; } 
-        .btn-primary { background: #007bff; color: white; }
-        .btn-sub { background: #6c757d; color: white; padding: 5px 10px; width: auto; font-size: 14px; }
-        
-        #info-panel { background: white; padding: 15px; border-radius: 8px;box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-top: 10px; display: none; } 
-        .info-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;border-bottom: 1px solid #eee; padding-bottom: 5px; } 
-        .info-label { font-weight: bold; color: #666; }
-        
-        #action-panel { display: none; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 15px; }
-        .btn-action { color: white; }
-        .btn-start { background: #28a745; }
-        .btn-complete { background: #17a2b8; }
-        .btn-break { background: #ffc107; color: #333; }
-        .btn-cancel { background: #dc3545; }
-
-        #msg-panel { margin-top: 10px; padding: 10px; border-radius: 5px; background: #e9ecef; font-weight: bold; text-align: center; font-size: 14px; }
-        
-        /* モーダル（子画面） */
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5);z-index: 1000; justify-content: center; align-items: center; }
-        .modal-content { background: white; padding: 20px; border-radius: 8px; width: 85%; max-width: 350px;max-height: 80%; overflow-y: auto; }
-        .modal-item { padding: 12px; border-bottom: 1px solid #ddd; cursor: pointer; font-size: 16px; }
-        .modal-item:hover { background: #f0f0f0; }
+        body { font-family: sans-serif; margin: 10px; padding: 0; background: #f5f5f5; color: #333; }
+        .row { display: flex; gap: 10px; margin-bottom: 10px; }
+        select { flex: 1; padding: 10px; font-size: 16px; }
+        
+        /* カメラコンテナとスキャンエリア制限（高さ40% 幅80%） */
+        #scanner-container { 
+            position: relative; 
+            width: 100%; 
+            max-width: 400px; 
+            height: 250px; 
+            margin: 0 auto 10px; 
+            overflow: hidden; 
+            background: #000; 
+            border-radius: 8px; 
+            display: none; 
+        }
+        #reader { width: 100% !important; height: 100% !important; border: none !important; }
+        #reader video { object-fit: cover !important; width: 100% !important; height: 100% !important; }
+        
+        /* ターゲットラインと外側の暗転マスク（疑似再現） */
+        .mask { position: absolute; box-sizing: border-box; pointer-events: none; }
+        .mask-top { top: 0; left: 0; width: 100%; height: 30%; background: rgba(0,0,0,0.6); }
+        .mask-bottom { bottom: 0; left: 0; width: 100%; height: 30%; background: rgba(0,0,0,0.6); }
+        .mask-left { top: 30%; left: 0; width: 10%; height: 40%; background: rgba(0,0,0,0.6); }
+        .mask-right { top: 30%; right: 0; width: 10%; height: 40%; background: rgba(0,0,0,0.6); }
+        .target-line { 
+            position: absolute; 
+            top: 50%; 
+            left: 10%; 
+            width: 80%; 
+            height: 2px; 
+            background: red; 
+            transform: translateY(-50%); 
+            pointer-events: none; 
+        }
+        
+        button { width: 100%; padding: 12px; font-size: 16px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-sub { background: #6c757d; color: white; padding: 5px 10px; width: auto; font-size: 14px; }
+        
+        #info-panel { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-top: 10px; display: none; }
+        .info-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .info-label { font-weight: bold; color: #666; }
+        
+        #action-panel { display: none; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 15px; }
+        .btn-action { color: white; }
+        .btn-start { background: #28a745; }
+        .btn-complete { background: #17a2b8; }
+        .btn-break { background: #ffc107; color: #333; }
+        .btn-cancel { background: #dc3545; }
+        #msg-panel { margin-top: 10px; padding: 10px; border-radius: 5px; background: #e9ecef; font-weight: bold; text-align: center; font-size: 14px; }
+        
+        /* モーダル（子画面） */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 20px; border-radius: 8px; width: 85%; max-width: 350px; max-height: 80%; overflow-y: auto; }
+        .modal-item { padding: 12px; border-bottom: 1px solid #ddd; cursor: pointer; font-size: 16px; }
+        .modal-item:hover { background: #f0f0f0; }
     </style>
 </head>
 <body>
