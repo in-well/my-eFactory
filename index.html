@@ -292,8 +292,7 @@
         async function fetchProcessInfo(codeParam) {
             msgPanel.textContent = "データ照合中...";
             try {
-                const response = 
-
+                const response = await fetch(`${GAS_DEPLOY_URL}?action=checkData&code=${encodeURIComponent(codeParam)}`);
                 const result = await response.json();
                 
                 if (result.status === "該当なし") {
@@ -364,8 +363,7 @@
                         const div = document.createElement('div');
                         div.className = "modal-item";
                         // 表示テキスト例：「001 (工順1)」「4002 (工順2)」
-                        div.textContent = type === 'procCode' ? `${item.procCode} (${item.procName})` : `工順: ${item.seq}
-
+                        div.textContent = type === 'procCode' ? `${item.procCode} (${item.procName})` : `工順: ${item.seq} (${item.procName})`;
                         div.onclick = () => {
                             const param = type === 'procCode' ? item.procCode : item.seq;
                             fetchProcessInfo(`${currentScanData},${param}`);
