@@ -541,7 +541,7 @@
         // === 6. 進捗更新処理とキャンセルのアクション ===
         // 新設：ボタンクリック時に確認メッセージを出す関数
         function confirmStatus(statusValue) {
-            if (confirm(ステータスを「${statusValue}」に更新します。よろしいですか？)) {
+            if (confirm(`ステータスを「${statusValue}」に更新します。よろしいですか？`)) {
                 updateStatus(statusValue);
             }
         }
