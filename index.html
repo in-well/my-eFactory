@@ -564,16 +564,15 @@
                     data: updateData
                 };
 
-                // CORS(Preflight)エラーを絶対に回避するため、
-                // フォーム送信と同じデータ形式（URLSearchParams）に変換して送信する
-                const searchParams = new URLSearchParams();
-                searchParams.append('postData', JSON.stringify(payload));
+                // CORSエラーを回避し、かつGAS側のJSON.parseを成功させるため
+                // データをプレーンテキストのBlob(塊)に変換して送信します。
+                const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain' });
 
-                const response = await fetch(GAS_DEPLOY_URL, {
-                    method: 'POST',
-                    mode: 'cors', // CORS通信を明示
-                    body: searchParams // 変換したデータをセット
-                });
+                const response = await fetch(GAS_DEPLOY_URL, {
+                    method: 'POST',
+                    mode: 'cors',
+                    body: blob // フォーム形式ではなく、プレーンテキストとしてBlobを送信
+                });
 
                 const result = await response.json();
                 if (result.success) {
