@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>スマホによるPOPシステム ver7.2</title>
+    <title>POPシステム ver7.4</title>
     <!-- バーコード・QRコード読込ライブラリ（html5-qrcode） -->
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
@@ -45,12 +45,55 @@
         
         button { width: 100%; padding: 12px; font-size: 16px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
         .btn-primary { background: #007bff; color: white; }
-        .btn-sub { background: #6c757d; color: white; padding: 0px 10px;height:26px;line-height:26px; width: auto; font-size: 14px; }
-        
-        #info-panel { background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-top: 10px; display: none; }
-        .info-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; border-bottom: 1px solid #eee; padding-bottom: 2px;min-height:32px }
-        .info-label { font-weight: bold; color: #666; }
-        
+
+        /* --- info-panel全体の余白を狭くする --- */
+        #info-panel { 
+            background: white; 
+            padding: 10px 12px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+            margin-top: 10px; 
+            display: none; 
+        }
+
+        /* --- 1行の高さを縮め、横位置を完全に揃える設定 --- */
+        .info-item { 
+            display: grid;
+            /* 左から「ラベル(85px固定)」「データ(残り全部)」「ボタン(自動)」で3列に固定 */
+            grid-template-columns: 85px 1fr auto; 
+            align-items: center; 
+            min-height: 32px;       /* 1行の高さをボタンに合わせてギュッと縮小 */
+            border-bottom: 1px solid #eee; 
+            padding: 2px 0; 
+        }
+
+        /* --- ラベル（管理コード・工程コードなど）の文字を左詰めに統一 --- */
+        .info-label { 
+            font-weight: bold; 
+            color: #666; 
+            text-align: left;       /* 左詰めに統一 */
+        }
+
+        /* --- データ（実際の中身の文字）の表示設定 --- */
+        .info-value {
+            text-align: left;       /* 左詰めに統一 */
+            padding-left: 5px;      /* ラベルとの間に少しだけ隙間を作る */
+            font-size: 15px;
+        }
+
+        /* --- サブボタン（選択）を縦に潰して小さくする --- */
+        .btn-sub { 
+            background: #6c757d; 
+            color: white; 
+            padding: 0 10px;        /* 上下の余白を0にして縦幅を潰す */
+            height: 26px;           /* ボタンの高さを低く固定 */
+            line-height: 26px;      /* 文字をボタンの縦中央に配置 */
+            width: auto; 
+            font-size: 13px; 
+            border-radius: 4px;
+            margin-left: 5px;
+        }
+
         #action-panel { display: none; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 15px; }
         .btn-action { color: white; }
         .btn-start { background: #28a745; }
@@ -69,8 +112,8 @@
 <body>
 
     <!-- タイトル表示 -->
-    <h2 style="font-size: 18px; margin: 5px 0 15px 0; text-align: center; color: #007bff;">
-        スマホによるPOPシステム ver7.2
+    <h2 style="font-size: 14px; margin: 5px 0 10px 0; text-align: center; color: #007bff;">
+        POPシステム ver7.4
     </h2>
 
     <!-- 1. 担当選択 -->
@@ -94,33 +137,59 @@
 
     <!-- 5. メッセージ表示 -->
     <div id="msg-panel">担当者と設備を選択してください。</div>
-
-    <!-- 4. 工程情報 -->
-    <div id="info-panel">
-        <div class="info-item"><span class="info-label">管理コード:</span><span id="lbl-code">-</span></div>
-        <div class="info-item">
-            <div><span class="info-label">工程コード:</span> <span id="lbl-proc-code">-</span></div>
-            <button id="btn-select-proc" class="btn-sub" style="display:none;">選択</button>
-        </div>
-        <div class="info-item">
-            <div><span class="info-label">工順:</span> <span id="lbl-seq">-</span></div>
-            <button id="btn-select-seq" class="btn-sub">選択</button>
-        </div>
-        <div class="info-item"><span class="info-label">品名:</span><span id="lbl-name">-</span></div>
-        <div class="info-item">
-            <div><span class="info-label">設備名:</span> <span id="lbl-device">-</span></div>
-            <button id="btn-select-device" class="btn-sub">選択</button>
-        </div>
-        <div class="info-item"><span class="info-label">進捗状況:</span><span id="lbl-status">-</span></div>
-        
-        <!-- ⑦ 次アクションボタン -->
-        <div id="action-panel">
-            <button class="btn-action btn-start" onclick="updateStatus('着手')">着手</button>
-            <button class="btn-action btn-complete" onclick="updateStatus('完了')">完了</button>
-            <button class="btn-action btn-break" onclick="updateStatus('中断')">中断</button>
-            <button class="btn-action btn-cancel" onclick="handleCancel()">ｷｬﾝｾﾙ</button>
-        </div>
-    </div>
+    
+    <!-- 4. 工程情報 -->
+    <div id="info-panel">
+        <!-- 管理コード -->
+        <div class="info-item">
+            <span class="info-label">管理コード:</span>
+            <span id="lbl-code" class="info-value">-</span>
+            <div></div> <!-- ボタンがない行は空の要素を入れて列を合わせます -->
+        </div>
+        
+        <!-- 工程コード -->
+        <div class="info-item">
+            <span class="info-label">工程コード:</span>
+            <span id="lbl-proc-code" class="info-value">-</span>
+            <button id="btn-select-proc" class="btn-sub" style="display:none;">選択</button>
+        </div>
+        
+        <!-- 工順 -->
+        <div class="info-item">
+            <span class="info-label">工順:</span>
+            <span id="lbl-seq" class="info-value">-</span>
+            <button id="btn-select-seq" class="btn-sub">選択</button>
+        </div>
+        
+        <!-- 品名 -->
+        <div class="info-item">
+            <span class="info-label">品名:</span>
+            <span id="lbl-name" class="info-value">-</span>
+            <div></div> <!-- 空の列 -->
+        </div>
+        
+        <!-- 設備名 -->
+        <div class="info-item">
+            <span class="info-label">設備名:</span>
+            <span id="lbl-device" class="info-value">-</span>
+            <button id="btn-select-device" class="btn-sub">選択</button>
+        </div>
+        
+        <!-- 進捗状況 -->
+        <div class="info-item">
+            <span class="info-label">進捗状況:</span>
+            <span id="lbl-status" class="info-value">-</span>
+            <div></div> <!-- 空の列 -->
+        </div>
+        
+        <!-- ⑦ 次アクションボタン -->
+        <div id="action-panel">
+            <button class="btn-action btn-start" onclick="updateStatus('着手')">着手</button>
+            <button class="btn-action btn-complete" onclick="updateStatus('完了')">完了</button>
+            <button class="btn-action btn-break" onclick="updateStatus('中断')">中断</button>
+            <button class="btn-action btn-cancel" onclick="handleCancel()">ｷｬﾝｾﾙ</button>
+        </div>
+    </div>
 
     <!-- 子画面（モーダル） -->
     <div id="modal" class="modal">
