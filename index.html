@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POPシステム ver7.6</title>
+    <title>POPシステム ver7.7</title>
     <!-- バーコード・QRコード読込ライブラリ（html5-qrcode） -->
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
@@ -29,7 +29,7 @@
         /* ターゲットラインと外側の暗転マスク（疑似再現） */
         .mask { position: absolute; box-sizing: border-box; pointer-events: none; }
         .mask-top { top: 0; left: 0; width: 100%; height: 30%; background: rgba(0,0,0,0.6); }
-        .mask-bottom { bottom: 0; left: 0; width: 100%; height: 30%; background: rgba(0,0,0,0.6); }
+        .mask-bottom { bottom: 0; left: 0; width: 100%; height: 30%; background: rgba(0,0,0,0.4); }
         .mask-left { top: 30%; left: 0; width: 10%; height: 40%; background: rgba(0,0,0,0.6); }
         .mask-right { top: 30%; right: 0; width: 10%; height: 40%; background: rgba(0,0,0,0.6); }
         .target-line { 
@@ -116,7 +116,7 @@
 
     <!-- タイトル表示 -->
     <h2 style="font-size: 12px; margin: 2px 0 5px 0; text-align: center; color: #007bff;">
-        POPシステム ver7.6
+        POPシステム ver7.7
     </h2>
 
     <!-- 1. 担当選択 -->
@@ -218,6 +218,7 @@
         let currentScanData = null; // 現在読込中のデータを保持
         let isScanning = false;
         let selectedCommentText = ""; // 選択されたコメントを保持する変数
+        let ignoreScan = false; // 【追加】起動直後の誤判定をガードするフラグ
 
         // DOM要素の取得
         const selectUser = document.getElementById('select-user');
@@ -343,7 +344,11 @@
         function startCamera() {
             scannerContainer.style.display = "block";
             infoPanel.style.display = "none"; // スキャン前は工程情報を非表示
-            
+            
+            // カメラ起動直後はスキャンを1.5秒間無視するガードをかける
+            ignoreScan = true;
+            setTimeout(() => { ignoreScan = false; }, 1500);
+
             html5QrcodeScanner = new Html5Qrcode("reader");
             const config = { fps: 10, qrbox: (width, height) => ({ width: width * 0.8, height: height * 0.4 }) };
             
@@ -373,8 +378,11 @@
 
         // === 4. スキャン成功時の判定とGAS通信 ===
         function onScanSuccess(decodedText, decodedResult) {
+            if (ignoreScan) return; // 【追加】ガード中の場合はスキャンを完全に無視
+
             const code = decodedText.trim();
-            
+            if (!code) return; // 【追加】空文字の場合は処理しない
+
             // すでに13桁が読み込まれており、追加で「工程コード(3〜4桁)」または「工順(1〜2桁)」を待っている場合
             if (currentScanData && currentScanData.length === 13) {
                 if (code.length >= 1 && code.length <= 4) {
@@ -598,6 +606,8 @@
             infoPanel.style.display = "none";
             btnScanCtrl.textContent = "次の製番スキャン";
             msgPanel.textContent = "次の製番をスキャンしてください。";
+
+            // 確実に前回のデータをリセットした状態でカメラを起動
             startCamera();
         }
 
