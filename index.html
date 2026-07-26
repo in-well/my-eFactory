@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POPシステム ver7.4</title>
+    <title>POPシステム ver7.5</title>
     <!-- バーコード・QRコード読込ライブラリ（html5-qrcode） -->
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
@@ -60,7 +60,7 @@
         .info-item { 
             display: grid;
             /* 左から「ラベル(85px固定)」「データ(残り全部)」「ボタン(自動)」で3列に固定 */
-            grid-template-columns: 85px 1fr auto; 
+            grid-template-columns: 90px 1fr auto; 
             align-items: center; 
             min-height: 32px;       /* 1行の高さをボタンに合わせてギュッと縮小 */
             border-bottom: 1px solid #eee; 
@@ -79,6 +79,9 @@
             text-align: left;       /* 左詰めに統一 */
             padding-left: 5px;      /* ラベルとの間に少しだけ隙間を作る */
             font-size: 15px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         /* --- サブボタン（選択）を縦に潰して小さくする --- */
@@ -112,8 +115,8 @@
 <body>
 
     <!-- タイトル表示 -->
-    <h2 style="font-size: 14px; margin: 5px 0 10px 0; text-align: center; color: #007bff;">
-        POPシステム ver7.4
+    <h2 style="font-size: 12px; margin: 2px 0 5px 0; text-align: center; color: #007bff;">
+        POPシステム ver7.5
     </h2>
 
     <!-- 1. 担当選択 -->
@@ -142,14 +145,14 @@
     <div id="info-panel">
         <!-- 管理コード -->
         <div class="info-item">
-            <span class="info-label">管理コード:</span>
+            <span class="info-label">管理ｺｰﾄﾞ:</span>
             <span id="lbl-code" class="info-value">-</span>
             <div></div> <!-- ボタンがない行は空の要素を入れて列を合わせます -->
         </div>
         
         <!-- 工程コード -->
         <div class="info-item">
-            <span class="info-label">工程コード:</span>
+            <span class="info-label">工程ｺｰﾄﾞ:</span>
             <span id="lbl-proc-code" class="info-value">-</span>
             <button id="btn-select-proc" class="btn-sub" style="display:none;">選択</button>
         </div>
@@ -181,7 +184,14 @@
             <span id="lbl-status" class="info-value">-</span>
             <div></div> <!-- 空の列 -->
         </div>
-        
+
+        <!-- 手動コメント選択行 -->
+        <div class="info-item">
+            <span class="info-label">コメント:</span>
+            <span id="lbl-comment" class="info-value">なし</span>
+            <button id="btn-select-comment" class="btn-sub">選択</button>
+        </div>
+
         <!-- ⑦ 次アクションボタン -->
         <div id="action-panel">
             <button class="btn-action btn-start" onclick="updateStatus('着手')">着手</button>
@@ -207,6 +217,7 @@
         let html5QrcodeScanner = null;
         let currentScanData = null; // 現在読込中のデータを保持
         let isScanning = false;
+        let selectedCommentText = ""; // 選択されたコメントを保持する変数
 
         // DOM要素の取得
         const selectUser = document.getElementById('select-user');
@@ -226,6 +237,8 @@
         const lblDevice = document.getElementById('lbl-device');
         const btnSelectDevice = document.getElementById('btn-select-device');
         const lblStatus = document.getElementById('lbl-status');
+        const lblComment = document.getElementById('lbl-comment');
+        const btnSelectComment = document.getElementById('btn-select-comment');
         const actionPanel = document.getElementById('action-panel');
 
         // モーダル要素
@@ -411,7 +424,8 @@
             lblName.textContent = data.partName || "-";
             lblDevice.textContent = data.deviceName || "-";
             lblStatus.textContent = data.status || "未設定";
-            
+            // コメントの表示リセット
+            selectedCommentText = "";
             // コード桁数による動的制御
             if (currentScanData.length === 11) {
                 // 11桁(QR): カメラ停止、進捗選択を待つ
@@ -434,6 +448,8 @@
         btnSelectSeq.addEventListener('click', () => openSubWindow('seq'));
         // 設備名「選択」
         btnSelectDevice.addEventListener('click', () => openSubWindow('device'));
+        // コメント選択イベント
+        btnSelectComment.addEventListener('click', () => openSubWindow('comment')); 
 
         async function openSubWindow(type) {
             // バーコード読込中の場合は一旦停止
@@ -482,13 +498,37 @@
                     div.onclick = () => {
                         lblDevice.textContent = dev.trim(); // 画面上の表示を一時変更（更新時に適用）
                         closeModal();
-                        // バーコード用にカメラを再開させる場合はここで判定
-                        if (currentScanData.length === 13) startCamera();
                     };
                     modalList.appendChild(div);
                 });
-            }
-        }
+            } else if (type === 'comment') {
+                // 追加：手動コメント選択の処理
+                modalTitle.textContent = "コメントを選択してください";
+                modalList.innerHTML = "";
+                const comments = JSON.parse(localStorage.getItem('pop_comments') || "[]");
+                comments.forEach(comment => {
+                    const div = document.createElement('div');
+                    div.className = "modal-item";
+                    div.textContent = comment;
+                    div.onclick = () => {
+                        selectedCommentText = comment;
+                        lblComment.textContent = comment;
+                        closeModal();
+                    };
+                    modalList.appendChild(div);
+                });
+                const noCommentDiv = document.createElement('div');
+                noCommentDiv.className = "modal-item";
+                noCommentDiv.textContent = "コメントなし";
+                noCommentDiv.style.fontStyle = "italic";
+                noCommentDiv.onclick = () => {
+                    selectedCommentText = "";
+                    lblComment.textContent = "なし";
+                    closeModal();
+                };
+                modalList.appendChild(noCommentDiv);
+            }
+        }
 
         function closeModal() {
             modal.style.display = "none";
@@ -499,70 +539,56 @@
         }
 
         // === 6. 進捗更新処理とキャンセルのアクション ===
+        // 新設：ボタンクリック時に確認メッセージを出す関数
+        function confirmStatus(statusValue) {
+            if (confirm(ステータスを「${statusValue}」に更新します。よろしいですか？)) {
+                updateStatus(statusValue);
+            }
+        }
         async function updateStatus(statusValue) {
-            // マスターの「コメント」選択モーダルを開く
-            const comments = JSON.parse(localStorage.getItem('pop_comments') || "[]");
-            modalTitle.textContent = "コメントを選択してください";
-            modalList.innerHTML = "";
-
+            msgPanel.textContent = "データ更新中...";
             // コメント選択後の最終更新処理関数
-            const executeUpdate = async (commentText) => {
-                closeModal();
-                msgPanel.textContent = "データ更新中...";
-                const updateData = {
-                    manageCode: lblCode.textContent,
-                    procCode: lblProcCode.textContent,
-                    seq: lblSeq.textContent,
-                    status: statusValue,
-                    user: selectUser.value,
-                    currentDevice: lblDevice.textContent,
-                    comment: commentText
-                };
-
-                try {
-                    const response = await fetch(GAS_DEPLOY_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'updateStatus', data: updateData })
-                    });
-                    const result = await response.json();
-                    if (result.success) {
-                        lblStatus.textContent = statusValue;
-                        msgPanel.textContent = "更新が完了しました。";
-                        setTimeout(resetToNextScan, 1500);
-                    } else {
-                        showError("更新できませんでした。");
-                    }
-                } catch (error) {
-                    showError("通信エラーにより更新に失敗しました。");
+            const updateData = {
+                manageCode: lblCode.textContent,
+                procCode: lblProcCode.textContent,
+                seq: lblSeq.textContent,
+                status: statusValue,
+                user: selectUser.value,
+                currentDevice: lblDevice.textContent,
+                comment:selectedCommentText // 事前に手動選択されたコメントを適用
+            };
+            try {
+                // 通信エラー対策：GASのdoPostに正しく届くようにJSON文字列にパッキング
+                const payload = {
+                    action: 'updateStatus',
+                    data: updateData
+                };
+                const response = await fetch(GAS_DEPLOY_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'updateStatus', data: updateData })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    lblStatus.textContent = statusValue;
+                    msgPanel.textContent = "更新が完了しました。";
+                    setTimeout(resetToNextScan, 1500);
+                } else {
+                    showError("更新できませんでした。");
                 }
-            };
-
-            // コメント選択肢の生成
-            comments.forEach(comment => {
-                const div = document.createElement('div');
-                div.className = "modal-item";
-                div.textContent = comment;
-                div.onclick = () => executeUpdate(comment);
-                modalList.appendChild(div);
-            });
-
-            // コメントなしの選択肢を追加
-            const noCommentDiv = document.createElement('div');
-            noCommentDiv.className = "modal-item";
-            noCommentDiv.textContent = "コメントなし";
-            noCommentDiv.style.fontStyle = "italic";
-            noCommentDiv.onclick = () => executeUpdate("");
-            modalList.appendChild(noCommentDiv);
-            modal.style.display = "flex";
+            } catch (error) {
+                showError("通信エラーにより更新に失敗しました。");
+            }
         }
             
         function handleCancel() {
+            // キャンセルは確認なしでダイレクトに次のスキャンへ
             resetToNextScan();
         }
 
         function resetToNextScan() {
             currentScanData = null;
+            selectedCommentText = "";
             infoPanel.style.display = "none";
             btnScanCtrl.textContent = "次の製番スキャン";
             msgPanel.textContent = "次の製番をスキャンしてください。";
