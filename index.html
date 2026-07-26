@@ -172,9 +172,9 @@
 
         <!-- ⑦ 次アクションボタン -->
         <div id="action-panel">
-            <button class="btn-action btn-start" onclick="updateStatus('着手')">着手</button>
-            <button class="btn-action btn-complete" onclick="updateStatus('完了')">完了</button>
-            <button class="btn-action btn-break" onclick="updateStatus('中断')">中断</button>
+            <button class="btn-action btn-start" onclick="confirmStatus('着手')">着手</button>
+            <button class="btn-action btn-complete" onclick="confirmStatus('完了')">完了</button>
+            <button class="btn-action btn-break" onclick="confirmStatus('中断')">中断</button>
             <button class="btn-action btn-cancel" onclick="handleCancel()">ｷｬﾝｾﾙ</button>
         </div>
     </div>
@@ -532,6 +532,9 @@
         // 新設：ボタンクリック時に確認メッセージを出す関数
         function confirmStatus(statusValue) {
             if (confirm(`ステータスを「${statusValue}」に更新します。よろしいですか？`)) {
+                // カメラのスキャンを完全に停止する（html5-qrcodeのインスタンスを止める）
+                stopCamera();
+                // データ更新
                 updateStatus(statusValue);
             }
         }
