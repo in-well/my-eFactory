@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POPシステム ver7.5</title>
+    <title>POPシステム ver7.6</title>
     <!-- バーコード・QRコード読込ライブラリ（html5-qrcode） -->
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
@@ -116,7 +116,7 @@
 
     <!-- タイトル表示 -->
     <h2 style="font-size: 12px; margin: 2px 0 5px 0; text-align: center; color: #007bff;">
-        POPシステム ver7.5
+        POPシステム ver7.6
     </h2>
 
     <!-- 1. 担当選択 -->
@@ -563,11 +563,18 @@
                     action: 'updateStatus',
                     data: updateData
                 };
+
+                // CORS(Preflight)エラーを絶対に回避するため、
+                // フォーム送信と同じデータ形式（URLSearchParams）に変換して送信する
+                const searchParams = new URLSearchParams();
+                searchParams.append('postData', JSON.stringify(payload));
+
                 const response = await fetch(GAS_DEPLOY_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'updateStatus', data: updateData })
+                    mode: 'cors', // CORS通信を明示
+                    body: searchParams // 変換したデータをセット
                 });
+
                 const result = await response.json();
                 if (result.success) {
                     lblStatus.textContent = statusValue;
