@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POPシステム ver7.11</title>
+    <title>POPシステム ver7.13</title>
     <!-- バーコード・QRコード読込ライブラリ（html5-qrcode） -->
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
@@ -99,7 +99,7 @@
 
     <!-- タイトル表示 -->
     <h2 style="font-size: 12px; margin: 2px 0 5px 0; text-align: center; color: #007bff;">
-        POPシステム ver7.11
+        POPシステム ver7.13
     </h2>
 
     <!-- 1. 担当選択 -->
@@ -528,82 +528,105 @@
             }
         }
 
-        // === 6. 進捗更新処理とキャンセルのアクション ===
-        // 新設：ボタンクリック時に確認メッセージを出す関数
-        function confirmStatus(statusValue) {
+        // === 6. 進捗更新処理とキャンセルのアクション ===
+        // ボタンクリック時に確認メッセージを出す関数
+        async function confirmStatus(statusValue) {
+            // 【対策1】通信中の連打を防ぐため、アクションパネル（ボタン群）を一時的に非表示にする
+            actionPanel.style.display = "none";
+
             if (confirm(`ステータスを「${statusValue}」に更新します。よろしいですか？`)) {
-                // カメラのスキャンを完全に停止する（html5-qrcodeのインスタンスを止める）
+                // 【対策2】OKを押したら、即座にカメラを停止して通信中フラグを立てる
+                ignoreScan = true; // スキャンを完全にガード
                 stopCamera();
-                // データ更新
-                updateStatus(statusValue);
+                
+                // 更新処理を実行（完了するまで待つ）
+                await updateStatus(statusValue);
+            } else {
+                // キャンセルされた場合はボタン群を再表示する
+                actionPanel.style.display = "grid";
             }
         }
-        async function updateStatus(statusValue) {
+
+        async function updateStatus(statusValue) {
             msgPanel.textContent = "データ更新中...";
-            // コメント選択後の最終更新処理関数
-            const updateData = {
-                manageCode: lblCode.textContent,
-                procCode: lblProcCode.textContent,
-                seq: lblSeq.textContent,
-                status: statusValue,
-                user: selectUser.value,
-                currentDevice: lblDevice.textContent,
-                comment:selectedCommentText // 事前に手動選択されたコメントを適用
-            };
-            try {
-                // 通信エラー対策：GASのdoPostに正しく届くようにJSON文字列にパッキング
+            msgPanel.style.color = "#333"; // エラー赤文字のリセット
+            
+            const updateData = {
+                manageCode: lblCode.textContent,
+                procCode: lblProcCode.textContent,
+                seq: lblSeq.textContent,
+                status: statusValue,
+                user: selectUser.value,
+                currentDevice: lblDevice.textContent,
+                comment: selectedCommentText 
+            };
+
+            try {
                 const payload = {
                     action: 'updateStatus',
                     data: updateData
                 };
 
-                // CORSエラーを回避し、かつGAS側のJSON.parseを成功させるため
-                // データをプレーンテキストのBlob(塊)に変換して送信します。
                 const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain' });
 
                 const response = await fetch(GAS_DEPLOY_URL, {
                     method: 'POST',
                     mode: 'cors',
-                    body: blob // フォーム形式ではなく、プレーンテキストとしてBlobを送信
+                    body: blob 
                 });
 
-                const result = await response.json();
-                if (result.success) {
-                    lblStatus.textContent = statusValue;
-                    msgPanel.textContent = "更新が完了しました。";
-                    setTimeout(resetToNextScan, 1500);
-                } else {
-                    showError("更新できませんでした。");
-                }
-            } catch (error) {
-                showError("通信エラーにより更新に失敗しました。");
-            }
-        }
-            
-        function handleCancel() {
-            // キャンセルは確認なしでダイレクトに次のスキャンへ
-            resetToNextScan();
-        }
+                const result = await response.json();
+                if (result.success) {
+                    lblStatus.textContent = statusValue;
+                    msgPanel.textContent = "更新が完了しました。";
+                    
+                    // 【対策3】1.5秒後にリセットする間も、ガード（ignoreScan=true）を維持する
+                    setTimeout(() => {
+                        resetToNextScan();
+                        ignoreScan = false; // 次のスキャン画面になってからガードを解く
+                    }, 1500);
+                } else {
+                    showError("更新できませんでした。");
+                    actionPanel.style.display = "grid"; // ボタンを再表示してやり直せるようにする
+                    ignoreScan = false;
+                }
+            } catch (error) {
+                showError("通信エラーにより更新に失敗しました。");
+                // 【対策4】通信エラー発生時も、ユーザーが「やり直し」や「キャンセル」を押せるように状態を戻す
+                actionPanel.style.display = "grid"; 
+                ignoreScan = false;
+                
+                // バーコード（13桁）運用中でカメラが止まってしまった場合は再起動する
+                if (currentScanData && currentScanData.length === 13 && !isScanning) {
+                    startCamera();
+                }
+            }
+        }
+            
+        function handleCancel() {
+            ignoreScan = false;
+            resetToNextScan();
+        }
 
-        function resetToNextScan() {
-            currentScanData = null;
+        function resetToNextScan() {
+            currentScanData = null;
             selectedCommentText = "";
-            infoPanel.style.display = "none";
-            btnScanCtrl.textContent = "次の製番スキャン";
-            msgPanel.textContent = "次の製番をスキャンしてください。";
+            infoPanel.style.display = "none";
+            btnScanCtrl.textContent = "次の製番スキャン";
+            msgPanel.textContent = "次の製番をスキャンしてください。";
 
-            // 確実に前回のデータをリセットした状態でカメラを起動
-            startCamera();
-        }
+            startCamera();
+        }
 
-        function showError(message) {
-            msgPanel.textContent = message;
-            msgPanel.style.color = "red";
-            setTimeout(() => { 
-                msgPanel.style.color = "#333"; 
-            }, 5000);
-        }
-
+        function showError(message) {
+            msgPanel.textContent = message;
+            msgPanel.style.color = "red";
+            // 5秒後に自動で黒文字に戻すタイマーは維持
+            setTimeout(() => { 
+                if(msgPanel.style.color === "red") msgPanel.style.color = "#333"; 
+            }, 5000);
+        }
+        
     </script>
 </body>
 </html>
