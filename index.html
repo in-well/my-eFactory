@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POPシステム ver7.13</title>
+    <title>POPシステム ver7.15</title>
     <!-- バーコード・QRコード読込ライブラリ（html5-qrcode） -->
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
@@ -99,7 +99,7 @@
 
     <!-- タイトル表示 -->
     <h2 style="font-size: 12px; margin: 2px 0 5px 0; text-align: center; color: #007bff;">
-        POPシステム ver7.13
+        POPシステム ver7.15
     </h2>
 
     <!-- 1. 担当選択 -->
@@ -549,7 +549,7 @@
 
         async function updateStatus(statusValue) {
             msgPanel.textContent = "データ更新中...";
-            msgPanel.style.color = "#333"; // エラー赤文字のリセット
+            msgPanel.style.color = "#333";
             
             const updateData = {
                 manageCode: lblCode.textContent,
@@ -567,6 +567,7 @@
                     data: updateData
                 };
 
+                // 💡 GAS側の仕様（e.postData.contents）に合わせてBlob形式の通信は維持します
                 const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain' });
 
                 const response = await fetch(GAS_DEPLOY_URL, {
@@ -576,27 +577,43 @@
                 });
 
                 const result = await response.json();
+                
                 if (result.success) {
-                    lblStatus.textContent = statusValue;
-                    msgPanel.textContent = "更新が完了しました。";
+                    // 💡【変更点1】データ上のクリア処理（resetToNextScanの中身）を「今すぐ」実行します。
+                    // これにより、裏で遅延エラーが発生しても、古いデータと紐づかなくなります。
+                    currentScanData = null;
+                    selectedCommentText = "";
+                    infoPanel.style.display = "none";
+                    btnScanCtrl.textContent = "次の製番スキャン";
                     
-                    // 【対策3】1.5秒後にリセットする間も、ガード（ignoreScan=true）を維持する
+                    // 💡【変更点2】「更新が完了しました」というメッセージだけを1.5秒間画面に残します。
+                    lblStatus.textContent = statusValue;
+                    msgPanel.textContent = "更新が完了しました。次のスキャンへ移行します...";
+                    
                     setTimeout(() => {
-                        resetToNextScan();
-                        ignoreScan = false; // 次のスキャン画面になってからガードを解く
+                        // 1.5秒後に、メッセージの最終切り替えと、カメラの再起動だけを行います。
+                        msgPanel.textContent = "次の製番をスキャンしてください。";
+                        startCamera();
+                        ignoreScan = false; 
                     }, 1500);
+
                 } else {
-                    showError("更新できませんでした。");
-                    actionPanel.style.display = "grid"; // ボタンを再表示してやり直せるようにする
+                    showError("更新できませんでした: " + (result.message || ""));
+                    actionPanel.style.display = "grid"; 
                     ignoreScan = false;
                 }
             } catch (error) {
+                // 💡【変更点3】すでにデータがクリアされた後（＝更新成功の1.5秒待機中、または次のスキャン待ち）
+                // に届いた、古い通信の遅延エラーは完全に無視して画面を破壊させません。
+                if (!currentScanData) {
+                    console.log("古い通信の遅延エラーを無視しました:", error);
+                    return; 
+                }
+
                 showError("通信エラーにより更新に失敗しました。");
-                // 【対策4】通信エラー発生時も、ユーザーが「やり直し」や「キャンセル」を押せるように状態を戻す
                 actionPanel.style.display = "grid"; 
                 ignoreScan = false;
                 
-                // バーコード（13桁）運用中でカメラが止まってしまった場合は再起動する
                 if (currentScanData && currentScanData.length === 13 && !isScanning) {
                     startCamera();
                 }
