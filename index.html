@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POPシステム ver7.15</title>
+    <title>POPシステム ver7.16</title>
     <!-- バーコード・QRコード読込ライブラリ（html5-qrcode） -->
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
@@ -99,7 +99,7 @@
 
     <!-- タイトル表示 -->
     <h2 style="font-size: 12px; margin: 2px 0 5px 0; text-align: center; color: #007bff;">
-        POPシステム ver7.15
+        POPシステム ver7.16
     </h2>
 
     <!-- 1. 担当選択 -->
@@ -197,6 +197,30 @@
         let isScanning = false;
         let selectedCommentText = ""; // 選択されたコメントを保持する変数
         let ignoreScan = false; // 【追加】起動直後の誤判定をガードするフラグ
+
+        // 【追加】「ピッ」という電子音をプログラムで生成して鳴らす関数
+        function playBeepSound() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                
+                oscillator.type = 'sine';       // 音の種類（サイン波：きれいな電子音）
+                oscillator.frequency.value = 2000; // 音の高さ（2000Hz：高めのピッという音）
+                
+                // 音が鳴り終わるときにプツッとノイズが乗るのを防ぐ設定
+                gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime); // 音量
+                gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.1); // 0.1秒かけて消音
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.1); // 0.1秒だけ鳴らす
+            } catch (e) {
+                console.error("音声の再生に失敗しました", e);
+            }
+        }
 
         // DOM要素の取得
         const selectUser = document.getElementById('select-user');
@@ -368,6 +392,7 @@
             // すでに13桁が読み込まれており、追加で「工程コード(3〜4桁)」または「工順(1〜2桁)」を待っている場合
             if (currentScanData && currentScanData.length === 13) {
                 if (code.length >= 1 && code.length <= 4) {
+                    playBeepSound(); // 【追加】正規の追加コードと判定したら音を鳴らす
                     fetchProcessInfo(`${currentScanData},${code}`);
                     return;
                 }
@@ -375,6 +400,7 @@
             
             // 初回コード読み取り（11桁：QRコード / 13桁：バーコード）
             if (code.length === 11 || code.length === 13) {
+                playBeepSound(); // 【追加】正規の追加コードと判定したら音を鳴らす
                 currentScanData = code;
                 fetchProcessInfo(code);
             }
