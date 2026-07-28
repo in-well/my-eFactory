@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POPシステム ver7.16</title>
+    <title>POPシステム ver7.17</title>
     <!-- バーコード・QRコード読込ライブラリ（html5-qrcode） -->
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
@@ -99,7 +99,7 @@
 
     <!-- タイトル表示 -->
     <h2 style="font-size: 12px; margin: 2px 0 5px 0; text-align: center; color: #007bff;">
-        POPシステム ver7.16
+        POPシステム ver7.17
     </h2>
 
     <!-- 1. 担当選択 -->
@@ -393,6 +393,8 @@
             if (currentScanData && currentScanData.length === 13) {
                 if (code.length >= 1 && code.length <= 4) {
                     playBeepSound(); // 【追加】正規の追加コードと判定したら音を鳴らす
+                    // 【追加】連続読み取りを防ぐため、ここでカメラを完全に停止する
+                    stopCamera(); 
                     fetchProcessInfo(`${currentScanData},${code}`);
                     return;
                 }
@@ -401,6 +403,8 @@
             // 初回コード読み取り（11桁：QRコード / 13桁：バーコード）
             if (code.length === 11 || code.length === 13) {
                 playBeepSound(); // 【追加】正規の追加コードと判定したら音を鳴らす
+                // 【追加】連続読み取りを防ぐため、ここでカメラを完全に停止する
+                stopCamera(); 
                 currentScanData = code;
                 fetchProcessInfo(code);
             }
